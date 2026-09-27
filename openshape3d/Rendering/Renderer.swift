@@ -242,6 +242,31 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         }
 
+        // 4-. PrintCAD build-volume ghost box: hairlines on the edge pipeline
+        // (depth read only, so bodies hide the edges behind them). Rides the
+        // grid switch so a "grid off" screenshot is clean of it too.
+        if drawGrid && !scene.buildVolumeLines.isEmpty {
+            encoder.setRenderPipelineState(pipelines.edge)
+            encoder.setDepthStencilState(pipelines.depthReadOnly)
+            for batch in scene.buildVolumeLines where !batch.segments.isEmpty {
+                var body = BodyUniforms()
+                body.modelMatrix = matrix_identity_float4x4
+                body.baseColor = batch.color
+                let length = batch.segments.count * MemoryLayout<SIMD3<Float>>.stride
+                guard let buffer = batch.segments.withUnsafeBytes({ raw in
+                    context.device.makeBuffer(bytes: raw.baseAddress!, length: length,
+                                              options: .storageModeShared)
+                }) else { continue }
+                encoder.setVertexBuffer(buffer, offset: 0, index: Int(BufferIndexPositions.rawValue))
+                encoder.setVertexBytes(&body, length: MemoryLayout<BodyUniforms>.stride,
+                                       index: Int(BufferIndexBodyUniforms.rawValue))
+                encoder.setFragmentBytes(&body, length: MemoryLayout<BodyUniforms>.stride,
+                                         index: Int(BufferIndexBodyUniforms.rawValue))
+                encoder.drawPrimitives(type: .line, vertexStart: 0,
+                                       vertexCount: batch.segments.count)
+            }
+        }
+
         // 4a. Image quads (Insert Image): blended, depth read, no depth write.
         if !scene.imageQuads.isEmpty {
             drawImageQuads(encoder: encoder)

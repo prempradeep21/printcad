@@ -1187,6 +1187,11 @@ final class EditorViewModel {
         scene.displayMode = displayMode
         scene.showHiddenEdges = showHiddenEdges
         scene.groundShadow = groundShadowEnabled
+        if buildVolumeVisible {
+            scene.buildVolumeLines = [SketchLineBatch(
+                segments: BuildVolume.edgeSegments(for: .ender3V3SE),
+                color: BuildVolume.lineColor)]
+        }
         if let section = sectionState {
             let plane = section.plane
             let n = simd_normalize(section.basePlane.normal)
@@ -5828,6 +5833,18 @@ final class EditorViewModel {
     /// Ground blob shadows (plan §B15); mirrored into the scene every
     /// rebuild. Not persisted, like the display mode.
     var groundShadowEnabled = false
+
+    /// PrintCAD ghost build-volume box (T0.3); mirrored into the scene every
+    /// rebuild. Unlike the display mode this IS remembered across launches:
+    /// it's a preference about the printer, not about one design.
+    var buildVolumeVisible = UserDefaults.standard.object(
+        forKey: EditorViewModel.buildVolumeVisibleDefaultsKey) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(buildVolumeVisible,
+                                      forKey: Self.buildVolumeVisibleDefaultsKey)
+        }
+    }
+    static let buildVolumeVisibleDefaultsKey = "printcad.buildVolumeVisible"
 
     // MARK: - Materials (plan §B15)
 

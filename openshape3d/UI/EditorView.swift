@@ -1635,6 +1635,11 @@ struct EditorView: View {
                             get: { viewModel.groundShadowEnabled },
                             set: { viewModel.groundShadowEnabled = $0 }
                         ))
+                        // PrintCAD printer build volume (T0.3).
+                        Toggle("Build Volume", isOn: Binding(
+                            get: { viewModel.buildVolumeVisible },
+                            set: { viewModel.buildVolumeVisible = $0 }
+                        ))
                         // Isolate (spec §16.2): hide everything but the
                         // selection; exiting restores.
                         if viewModel.isIsolateActive {

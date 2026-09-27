@@ -13,6 +13,19 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — T0.3: Printer profile + build-volume box
+- Changed: new `openshape3d/PrintCAD/PrinterProfile.swift` (Ender 3 V3 SE constants) and
+  `openshape3d/PrintCAD/BuildVolume.swift` (12 box edges, Y-up: X ±110, Z ±110, Y 0–250).
+  `ViewportScene.buildVolumeLines` (excluded from Zoom-to-Fit bounds), `EditorViewModel.buildVolumeVisible`
+  (default on, remembered in UserDefaults `printcad.buildVolumeVisible`), hairline draw pass in `Renderer`
+  after the grid (hidden with the grid in "grid off" screenshots), "Build Volume" toggle in the Views menu.
+- Tests added: `PrinterProfileTests` (5): profile values, 12 edges at the bed corners, axis-aligned edge
+  lengths 220/250/220, fit bounds ignore the box, box alone gives no fit bounds.
+- Test count / result: 1737 run, 1736 passed, 1 skipped, 0 failed.
+- Prem checks by hand: on the Mac app, pinch out until the grey box appears around the origin; Views →
+  Build Volume hides/shows it; relaunch keeps the setting.
+- Found work (not done): Mac has no scroll-wheel/⌘± zoom — only trackpad pinch (candidate for T3.4 Mac polish).
+
 ### 2026-09-28 — Roadmap re-scope
 - Mapped every original task against the fork. M1 (expressions, variables, feature model, rebuild, timeline)
   and most of M2 (fillet, chamfer, shell, booleans, topo naming, edit survival) already exist upstream with tests.

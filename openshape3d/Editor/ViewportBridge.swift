@@ -159,6 +159,10 @@ struct ViewportScene {
     var imageQuads: [ImageQuadDrawable] = []
     /// Cheap planar blob shadows under body AABBs (visualization v1).
     var groundShadow: Bool = false
+    /// PrintCAD ghost build-volume box, drawn after the grid. Deliberately
+    /// NOT folded into `worldBounds`: fitting a 10 mm part must not zoom out
+    /// to the whole printer.
+    var buildVolumeLines: [SketchLineBatch] = []
 
     /// World-space AABB of everything drawn — bodies AND sketches — for
     /// fit-view. Nil when empty.
