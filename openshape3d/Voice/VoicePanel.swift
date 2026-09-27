@@ -2,10 +2,11 @@
 //  VoicePanel.swift
 //  openshape3d
 //
-//  PrintCAD V1.1: the bottom-centre voice card. Shows what the microphone is
-//  hearing as you speak, what you're pointing at, and — after Enter — what was
-//  sent. The viewport stays interactive underneath so a face or edge can be
-//  clicked mid-sentence. Escape is owned by CommandShortcutsView while open.
+//  PrintCAD V1: the bottom-centre voice card. Shows what the microphone is
+//  hearing, what you're pointing at, and — after Enter — Jev's decision. The
+//  viewport stays interactive underneath so a face or edge can be clicked
+//  mid-sentence. The mic button starts/stops listening; nothing listens on its
+//  own. Escape is owned by CommandShortcutsView while open.
 //
 
 import SwiftUI
@@ -19,9 +20,7 @@ struct VoicePanel: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             transcript
-            if let request = voice.lastRequest {
-                sentLine(request)
-            }
+            outcome
         }
         .padding(16)
         .frame(maxWidth: 560, alignment: .leading)
@@ -31,9 +30,23 @@ struct VoicePanel: View {
         .accessibilityIdentifier("VoicePanel")
     }
 
+    // MARK: - Header
+
     private var header: some View {
         HStack(spacing: 10) {
-            MicLevelIndicator(level: voice.level, active: voice.isListening)
+            Button {
+                if voice.isListening {
+                    voice.pauseListening()
+                } else {
+                    Task { await voice.start() }
+                }
+            } label: {
+                MicLevelIndicator(level: voice.level, active: voice.isListening)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(voice.isListening ? "Stop listening" : "Speak")
+            .accessibilityIdentifier("VoiceMicButton")
+
             Text(statusText)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isUnavailable ? .red : .primary)
@@ -57,6 +70,24 @@ struct VoicePanel: View {
             .accessibilityIdentifier("VoiceCloseButton")
         }
     }
+
+    private var isUnavailable: Bool {
+        if case .unavailable = voice.phase { return true }
+        return false
+    }
+
+    private var statusText: String {
+        switch voice.phase {
+        case .starting: return "Starting microphone…"
+        case .listening: return "Listening"
+        case .unavailable(let message): return message
+        case .idle:
+            if voice.isAsking { return "Asking Jev…" }
+            return voice.transcript.isEmpty ? "Tap the mic to speak" : "Press Enter to send, or tap the mic to add more"
+        }
+    }
+
+    // MARK: - Transcript + Enter
 
     private var transcript: some View {
         HStack(alignment: .bottom, spacing: 12) {
@@ -87,27 +118,94 @@ struct VoicePanel: View {
         }
     }
 
-    private func sentLine(_ request: VoiceRequest) -> some View {
-        // V1.1: nothing is executed yet — say so plainly.
-        Text("Would send: “\(request.transcript)” · \(request.target.chipText)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-            .accessibilityIdentifier("VoiceLastRequest")
-    }
+    // MARK: - Jev's answer
 
-    private var isUnavailable: Bool {
-        if case .unavailable = voice.phase { return true }
-        return false
-    }
-
-    private var statusText: String {
-        switch voice.phase {
-        case .idle: return "Voice Edit"
-        case .starting: return "Starting microphone…"
-        case .listening: return "Listening"
-        case .unavailable(let message): return message
+    @ViewBuilder
+    private var outcome: some View {
+        switch voice.outcome {
+        case .none:
+            EmptyView()
+        case .asking(let request):
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Sending “\(request.transcript)” · \(request.target.chipText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .accessibilityIdentifier("VoiceAsking")
+        case .decided(let request, let decision):
+            DecisionView(request: request, decision: decision) { voice.choose($0) }
+        case .failed(_, let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(3)
+                .accessibilityIdentifier("VoiceError")
         }
+    }
+}
+
+/// Jev's answer: the action and its details, or — when unsure — options.
+private struct DecisionView: View {
+    let request: VoiceRequest
+    let decision: VoiceDecision
+    let choose: (VoiceAction) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Jev:")
+                    .foregroundStyle(.secondary)
+                Text(summary)
+                    .fontWeight(.semibold)
+                Spacer(minLength: 8)
+                Text("\(Int((decision.confidence * 100).rounded()))% · \(String(format: "%.2f", decision.latency)) s")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .font(.callout)
+
+            if !decision.numbers.isEmpty {
+                Text(decision.numbers.map { "\($0.number.phrase) = \($0.role.rawValue)" }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if decision.needsConfirmation, !decision.suggestions.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Not sure — did you mean:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(decision.suggestions, id: \.action) { option in
+                        Button("\(option.action.title) \(Int((option.probability * 100).rounded()))%") {
+                            choose(option.action)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+
+            // V1.2: decisions are shown, not yet applied.
+            Text("“\(request.transcript)” · \(request.target.chipText) — not applied yet (V1.3)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("VoiceDecision")
+    }
+
+    private var summary: String {
+        var parts = [decision.action.title]
+        if decision.placement != .notApplicable {
+            parts.append(decision.placement == .faceCenter ? "centre" : "where clicked")
+        }
+        if decision.depth != .notApplicable {
+            parts.append(decision.depth == .throughAll ? "through all" : "blind")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -119,14 +217,14 @@ private struct MicLevelIndicator: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color.accentColor.opacity(active ? 0.25 : 0.08))
+                .fill(Color.accentColor.opacity(active ? 0.25 : 0.12))
                 .scaleEffect(active ? 1 + CGFloat(level) * 0.6 : 1)
                 .animation(.easeOut(duration: 0.08), value: level)
-            Image(systemName: active ? "mic.fill" : "mic.slash")
+            Image(systemName: active ? "mic.fill" : "mic")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(active ? Color.accentColor : .secondary)
+                .foregroundStyle(Color.accentColor)
         }
         .frame(width: 34, height: 34)
-        .accessibilityHidden(true)
+        .contentShape(Circle())
     }
 }

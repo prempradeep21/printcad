@@ -13,6 +13,23 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — V1.2: Enter sends words + selection to Jev
+- Changed: `Voice/JevClient.swift` (POST api.typesafe.ai/v1/systemone, Bearer key, clear errors for 401/422/429/529),
+  `Voice/VoiceIntent.swift` (action options filtered by selection, placement, depth, one role question per spoken
+  number; reply → `VoiceDecision`), `Voice/SpokenNumberParser.swift` ("seven MM", "2.5 millimetres", "M3", cm → mm).
+  `VoiceSession`: one utterance at a time — mic stops when the recognizer finishes or on Enter, never restarts by
+  itself; tapping the mic adds to unsent words; Enter → "Asking Jev…" → decision (or "Did you mean" buttons under
+  60 %). Panel shows action · placement · depth, confidence, latency, number roles. Sketch profiles are a target.
+  Key: gitignored `.env.local` → committed `Config/Secrets.xcconfig` (`#include?`) → Debug-only
+  `Config/Info-Debug.plist` (`JEVAPIKey`). Outgoing network entitlement added. Decisions are shown, not applied (V1.3).
+- Tests added: `JevVoiceTests.swift` (parser 8, request 3, decision 6, HTTP client 5 with stubbed network, key 2);
+  `VoiceEditTests` reworked for Enter → Jev and no continuous listening. 52 voice/Jev tests.
+- Test count / result: 52 voice/Jev tests pass. Full suite not re-run this task.
+- Prem checks by hand: done 2026-09-28 — "I want you to put a hole in this at the centre" on a face →
+  Jev: Hole · centre · through all, 100 %, 0.57 s.
+- Found work (not done): the chip can change after Enter if the pick changes (shows "Body" while the sent request
+  says "Face"); decide whether the chip should freeze to the sent target.
+
 ### 2026-09-28 — V1.1: Voice panel + mic (Voice Edit)
 - Changed: new `openshape3d/Voice/` — `VoiceSession` (permission → listening → live transcript → Enter),
   `LiveSpeechTranscriber` (AVAudioEngine + on-device SFSpeechRecognizer, CAD vocabulary boosted),

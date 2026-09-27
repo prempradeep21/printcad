@@ -16,6 +16,8 @@ enum VoiceTarget: Equatable {
     case bodies(count: Int)
     /// A picked face. `areaMM2` is the world-space area of the face.
     case face(areaMM2: Double)
+    /// A closed sketch region picked for extrusion — not solid yet.
+    case sketchProfile(areaMM2: Double)
     case edges(count: Int)
 
     /// Short label for the chip in the voice panel.
@@ -27,6 +29,8 @@ enum VoiceTarget: Equatable {
             return count == 1 ? "Body" : "\(count) bodies"
         case .face(let area):
             return "Face · \(Self.format(area)) mm²"
+        case .sketchProfile(let area):
+            return "Sketch profile · \(Self.format(area)) mm²"
         case .edges(let count):
             return count == 1 ? "Edge" : "\(count) edges"
         }
@@ -42,6 +46,8 @@ enum VoiceTarget: Equatable {
             return count == 1 ? "one solid body" : "\(count) solid bodies"
         case .face(let area):
             return "one face, area \(Self.format(area)) mm²"
+        case .sketchProfile(let area):
+            return "one closed sketch profile (not a solid yet), area \(Self.format(area)) mm²"
         case .edges(let count):
             return count == 1 ? "one edge" : "\(count) edges"
         }

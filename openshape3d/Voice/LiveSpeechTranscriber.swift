@@ -28,12 +28,22 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
     private var task: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
 
+    /// The request the audio tap feeds (set/cleared across threads).
+    private let feed = RequestFeed()
+    /// Bumped per start/stop so late callbacks from a finished task are
+    /// ignored instead of touching the next utterance.
+    private var generation = 0
+    private var onPartial: ((String) -> Void)?
+    private var onEnd: (() -> Void)?
+    private var onError: ((String) -> Void)?
+
     /// Words the recognizer should favour — CAD vocabulary it would otherwise
     /// hear as "skillet", "shampoo" and friends.
     static let vocabulary = [
         "fillet", "chamfer", "extrude", "extrusion", "sketch", "boss", "shell",
         "counterbore", "countersink", "through hole", "blind hole", "M2", "M3",
         "M4", "M5", "mm", "millimetre", "millimeter", "face", "edge", "pocket",
+        "centre", "center",
     ]
 
     func requestAuthorization() async -> SpeechAuthorization {
@@ -49,6 +59,7 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
 
     func start(onPartial: @escaping (String) -> Void,
                onLevel: @escaping (Float) -> Void,
+               onEnd: @escaping () -> Void,
                onError: @escaping (String) -> Void) throws {
         stop()
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")) ?? SFSpeechRecognizer(),
@@ -57,22 +68,15 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
             throw TranscriberError.recognizerUnavailable
         }
         self.recognizer = recognizer
+        self.onPartial = onPartial
+        self.onEnd = onEnd
+        self.onError = onError
 
         #if os(iOS) || targetEnvironment(macCatalyst)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: .duckOthers)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.contextualStrings = Self.vocabulary
-        request.taskHint = .dictation
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
-        request.addsPunctuation = false
-        self.request = request
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
@@ -83,7 +87,7 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
         // nil format = the node's own output format, so the tap can never
         // mismatch it (a mismatch is an Objective-C exception, i.e. a crash).
         input.installTap(onBus: 0, bufferSize: 1024, format: nil,
-                         block: Self.makeTap(request: request, onLevel: onLevel))
+                         block: Self.makeTap(feed: feed, onLevel: onLevel))
         engine.prepare()
         do {
             try engine.start()
@@ -92,26 +96,73 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
             throw error
         }
         audioEngine = engine
-
-        task = recognizer.recognitionTask(
-            with: request,
-            resultHandler: Self.makeResultHandler(onPartial: onPartial, onError: onError)
-        )
+        beginSegment()
     }
 
     func stop() {
+        generation += 1   // anything still in flight is now stale
         if let engine = audioEngine {
             engine.stop()
             engine.inputNode.removeTap(onBus: 0)
             audioEngine = nil
         }
+        feed.set(nil)
         request?.endAudio()
         task?.cancel()
         request = nil
         task = nil
+        onPartial = nil
+        onEnd = nil
+        onError = nil
         #if os(iOS) || targetEnvironment(macCatalyst)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
+    }
+
+    // MARK: - One utterance
+
+    /// Start the recognition task for this utterance. SFSpeechRecognizer ends
+    /// the task by itself after a pause; that ends the utterance (mic off,
+    /// `onEnd`) — no automatic restart, by Prem's choice (2026-09-28).
+    private func beginSegment() {
+        guard let recognizer, audioEngine != nil else { return }
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.contextualStrings = Self.vocabulary
+        request.taskHint = .dictation
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        }
+        request.addsPunctuation = false
+        self.request = request
+        feed.set(request)
+
+        generation += 1
+        let current = generation
+        let deliver = UncheckedSendable<([RecognitionEvent]) -> Void> { [weak self] events in
+            self?.handle(events, generation: current)
+        }
+        task = recognizer.recognitionTask(with: request, resultHandler: Self.makeResultHandler(deliver))
+    }
+
+    private func handle(_ events: [RecognitionEvent], generation: Int) {
+        guard generation == self.generation, audioEngine != nil else { return }
+        for event in events {
+            switch event {
+            case .revised(let text):
+                onPartial?(text)
+            case .ended:
+                let finished = onEnd
+                stop()
+                finished?()
+                return
+            case .failed(let message):
+                let failed = onError
+                stop()
+                failed?(message)
+                return
+            }
+        }
     }
 
     /// What the audio stack reported, for the error line — enough to tell a
@@ -145,15 +196,15 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
         }
     }
 
-    /// Audio thread: append the buffer to the recognizer and report an RMS
-    /// level (scaled so normal speech sits around 0.3–0.8).
+    /// Audio thread: feed the buffer to the current recognition request and
+    /// report an RMS level (scaled so normal speech sits around 0.3–0.8).
     private nonisolated static func makeTap(
-        request: SFSpeechAudioBufferRecognitionRequest,
+        feed: RequestFeed,
         onLevel: @escaping (Float) -> Void
     ) -> AVAudioNodeTapBlock {
         let report = UncheckedSendable(onLevel)
         return { buffer, _ in
-            request.append(buffer)
+            feed.append(buffer)
             guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
             let count = Int(buffer.frameLength)
             var sum: Float = 0
@@ -164,27 +215,31 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
         }
     }
 
-    /// Recognizer queue: forward each revision of the transcript. A final
-    /// result with no error just means the utterance ended — not a failure.
+    /// Recognizer queue: turn one callback into events, delivered to the main
+    /// actor in ONE hop so "last words" always land before "task ended".
     private nonisolated static func makeResultHandler(
-        onPartial: @escaping (String) -> Void,
-        onError: @escaping (String) -> Void
+        _ deliver: UncheckedSendable<([RecognitionEvent]) -> Void>
     ) -> (SFSpeechRecognitionResult?, Error?) -> Void {
-        let partial = UncheckedSendable(onPartial)
-        let failure = UncheckedSendable(onError)
         return { result, error in
-            if let text = result?.bestTranscription.formattedString {
-                Task { @MainActor in partial.value(text) }
+            var events: [RecognitionEvent] = []
+            if let result {
+                events.append(.revised(result.bestTranscription.formattedString))
+                if result.isFinal { events.append(.ended) }
             }
-            if let error = error as NSError?, !Self.isBenign(error) {
-                let message = "Speech recognition stopped: \(error.localizedDescription)"
-                Task { @MainActor in failure.value(message) }
+            if events.last != .ended, let error = error as NSError? {
+                events.append(Self.isBenign(error)
+                    ? .ended
+                    : .failed("Speech recognition stopped: \(error.localizedDescription)"))
             }
+            guard !events.isEmpty else { return }
+            let batch = events
+            Task { @MainActor in deliver.value(batch) }
         }
     }
 
     /// Cancelling a task (on stop / submit) reports an error; so does a
-    /// silence timeout with nothing said. Neither should reach the user.
+    /// silence timeout with nothing said. Neither should reach the user —
+    /// they just end the utterance.
     private nonisolated static func isBenign(_ error: NSError) -> Bool {
         // kAFAssistantErrorDomain 216 = cancelled, 1110 = no speech detected;
         // 301 = request was cancelled (SFSpeechErrorDomain).
@@ -201,6 +256,29 @@ final class LiveSpeechTranscriber: SpeechTranscribing {
             case .noMicrophone(let details): return "No microphone input was found (\(details))."
             }
         }
+    }
+}
+
+private enum RecognitionEvent: Equatable, Sendable {
+    case revised(String)
+    case ended
+    case failed(String)
+}
+
+/// The audio tap runs on the audio thread and must always feed whichever
+/// recognition request is current; this swaps it safely between threads.
+private final class RequestFeed: @unchecked Sendable {
+    private let lock = NSLock()
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+
+    func set(_ request: SFSpeechAudioBufferRecognitionRequest?) {
+        lock.lock(); defer { lock.unlock() }
+        self.request = request
+    }
+
+    func append(_ buffer: AVAudioPCMBuffer) {
+        lock.lock(); defer { lock.unlock() }
+        request?.append(buffer)
     }
 }
 

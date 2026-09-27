@@ -21,6 +21,18 @@ extension EditorViewModel {
                 body.render, triangles: context.faceTriangles, scale: body.transform.scale
             )
             return .face(areaMM2: area)
+        case .extruding:
+            // A picked sketch region (the extrude arrow is up) or a face pull.
+            guard let context = toolContext else { return .nothing }
+            if context.sketchID != nil {
+                let holes = context.holes.reduce(0) { $0 + MeasureKit.area(of: $1) }
+                return .sketchProfile(areaMM2: MeasureKit.area(of: context.profile) - holes)
+            }
+            if let id = context.sourceBody, let body = session.document.body(with: id) {
+                return .face(areaMM2: MeasureKit.faceArea(
+                    body.render, triangles: context.faceTriangles, scale: body.transform.scale))
+            }
+            return .nothing
         case .pickingBlendEdges:
             return blendSelectedEdges.isEmpty ? .nothing : .edges(count: blendSelectedEdges.count)
         default:

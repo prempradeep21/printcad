@@ -2,10 +2,11 @@
 //  VoiceEditTests.swift
 //  openshape3dTests
 //
-//  PrintCAD V1.1 — the voice panel: selection → VoiceTarget, the session's
-//  permission / live-transcript / Enter behaviour (with a fake microphone, so
-//  no test ever opens real audio or a permission prompt), and the Cmd+Shift+V
-//  command wiring. Nothing here edits geometry; that starts in V1.3.
+//  PrintCAD V1 — the voice panel: selection → VoiceTarget, the session's
+//  permission / one-utterance listening / Enter → Jev behaviour (with a fake
+//  microphone and a fake Jev, so no test opens real audio, a permission
+//  prompt or the network), and the Cmd+Shift+V command wiring. Nothing here
+//  edits geometry; that starts in V1.3.
 //
 
 import XCTest
@@ -27,6 +28,7 @@ final class FakeTranscriber: SpeechTranscribing {
     private(set) var isRunning = false
     private var onPartial: ((String) -> Void)?
     private var onLevel: ((Float) -> Void)?
+    private var onEnd: (() -> Void)?
     private var onError: ((String) -> Void)?
 
     func requestAuthorization() async -> SpeechAuthorization {
@@ -41,12 +43,14 @@ final class FakeTranscriber: SpeechTranscribing {
 
     func start(onPartial: @escaping (String) -> Void,
                onLevel: @escaping (Float) -> Void,
+               onEnd: @escaping () -> Void,
                onError: @escaping (String) -> Void) throws {
         if let startError { throw startError }
         startCount += 1
         isRunning = true
         self.onPartial = onPartial
         self.onLevel = onLevel
+        self.onEnd = onEnd
         self.onError = onError
     }
 
@@ -57,11 +61,54 @@ final class FakeTranscriber: SpeechTranscribing {
 
     func hear(_ text: String) { onPartial?(text) }
     func level(_ value: Float) { onLevel?(value) }
+    /// The recognizer decided the utterance is over (it stops itself first).
+    func finish() {
+        isRunning = false
+        onEnd?()
+    }
     func fail(_ message: String) { onError?(message) }
+}
+
+/// Stands in for Jev. Answers with `decision` (or throws `error`) and records
+/// what it was asked. `hold` keeps the reply back until `release()`.
+@MainActor
+final class FakeClassifier: VoiceClassifying {
+    var decision = VoiceDecision.sample()
+    var error: Error?
+    var hold = false
+    private(set) var asked: [VoiceRequest] = []
+    private var pending: CheckedContinuation<Void, Never>?
+
+    func decide(_ request: VoiceRequest) async throws -> VoiceDecision {
+        asked.append(request)
+        if hold { await withCheckedContinuation { pending = $0 } }
+        if let error { throw error }
+        return decision
+    }
+
+    func release() {
+        pending?.resume()
+        pending = nil
+    }
+}
+
+extension VoiceDecision {
+    static func sample(_ action: VoiceAction = .hole, confidence: Double = 1) -> VoiceDecision {
+        VoiceDecision(action: action, confidence: confidence,
+                      alternatives: [.init(action: action, probability: confidence)],
+                      placement: .faceCenter, depth: .throughAll, numbers: [],
+                      model: "jev-test", latency: 0.4)
+    }
 }
 
 private struct BoomError: LocalizedError {
     var errorDescription: String? { "boom" }
+}
+
+/// Lets the session's Enter → Jev task run.
+@MainActor
+private func settle() async {
+    for _ in 0..<10 { await Task.yield() }
 }
 
 // MARK: - VoiceTarget (pure)
@@ -81,6 +128,12 @@ final class VoiceTargetTests: XCTestCase {
         XCTAssertEqual(VoiceTarget.face(areaMM2: 3.999).chipText, "Face · 4 mm²")
     }
 
+    func testASketchProfileIsNamedAsSuch() {
+        XCTAssertEqual(VoiceTarget.sketchProfile(areaMM2: 3060).chipText, "Sketch profile · 3060 mm²")
+        XCTAssertEqual(VoiceTarget.sketchProfile(areaMM2: 3060).classifierDescription,
+                       "one closed sketch profile (not a solid yet), area 3060 mm²")
+    }
+
     func testClassifierDescriptionIsOneShortLine() {
         XCTAssertEqual(VoiceTarget.face(areaMM2: 800).classifierDescription, "one face, area 800 mm²")
         XCTAssertEqual(VoiceTarget.edges(count: 2).classifierDescription, "2 edges")
@@ -88,12 +141,51 @@ final class VoiceTargetTests: XCTestCase {
     }
 }
 
-// MARK: - VoiceSession (fake microphone)
+// MARK: - TranscriptAccumulator (pure)
+
+/// Joins what was heard across mic taps before Enter.
+final class TranscriptAccumulatorTests: XCTestCase {
+    func testRevisionsReplaceEachOtherWithinOneSegment() {
+        var t = TranscriptAccumulator()
+        XCTAssertEqual(t.revise("drill"), "drill")
+        XCTAssertEqual(t.revise("drill a hole"), "drill a hole")
+        XCTAssertEqual(t.text, "drill a hole")
+    }
+
+    func testAPauseMidSentenceKeepsTheFirstHalf() {
+        var t = TranscriptAccumulator()
+        t.revise("drill a 5 mm hole")
+        XCTAssertEqual(t.segmentEnded(), "drill a 5 mm hole")
+        XCTAssertEqual(t.revise("in the"), "drill a 5 mm hole in the")
+        XCTAssertEqual(t.revise("in the centre"), "drill a 5 mm hole in the centre")
+    }
+
+    func testSilentSegmentsAddNothing() {
+        var t = TranscriptAccumulator()
+        t.segmentEnded()
+        t.revise("")
+        t.segmentEnded()
+        XCTAssertEqual(t.text, "")
+        t.revise("  chamfer ")
+        XCTAssertEqual(t.text, "chamfer")
+    }
+
+    func testResetStartsOver() {
+        var t = TranscriptAccumulator()
+        t.revise("fillet")
+        t.segmentEnded()
+        t.reset()
+        XCTAssertEqual(t.text, "")
+        XCTAssertEqual(t.revise("undo"), "undo")
+    }
+}
+
+// MARK: - VoiceSession (fake microphone, fake Jev)
 
 @MainActor
 final class VoiceSessionTests: XCTestCase {
-    private func session(_ fake: FakeTranscriber) -> VoiceSession {
-        VoiceSession(makeTranscriber: { fake })
+    private func session(_ fake: FakeTranscriber, _ jev: FakeClassifier? = nil) -> VoiceSession {
+        VoiceSession(makeTranscriber: { fake }, classifier: jev ?? FakeClassifier())
     }
 
     func testStartingWithPermissionListensAndShowsWordsAsTheyAreHeard() async {
@@ -103,7 +195,7 @@ final class VoiceSessionTests: XCTestCase {
         XCTAssertEqual(voice.phase, .listening)
         XCTAssertEqual(fake.startCount, 1)
 
-        // The recognizer revises the whole transcript as it goes.
+        // The recognizer revises the whole utterance as it goes.
         fake.hear("drill")
         XCTAssertEqual(voice.transcript, "drill")
         fake.hear("drill a hole in the")
@@ -157,37 +249,134 @@ final class VoiceSessionTests: XCTestCase {
         XCTAssertEqual(fake.startCount, 0)
     }
 
-    func testEnterWithNothingSaidDoesNothing() async {
+    // MARK: No continuous listening (Prem, 2026-09-28)
+
+    func testWhenTheUtteranceEndsTheMicStaysOffAndTheWordsStay() async {
         let fake = FakeTranscriber()
         let voice = session(fake)
+        await voice.start()
+        fake.hear("drill a hole in the centre")
+        fake.finish()
+        XCTAssertEqual(voice.phase, .idle, "mic off after the recognizer finishes")
+        XCTAssertEqual(voice.transcript, "drill a hole in the centre")
+        XCTAssertEqual(fake.startCount, 1, "never restarts on its own")
+        XCTAssertTrue(voice.canSubmit)
+    }
+
+    func testTappingTheMicAgainBeforeEnterAddsToWhatWasHeard() async {
+        let fake = FakeTranscriber()
+        let voice = session(fake)
+        await voice.start()
+        fake.hear("drill a 5 mm hole")
+        fake.finish()
+        await voice.start()
+        XCTAssertEqual(fake.startCount, 2)
+        fake.hear("in the centre")
+        XCTAssertEqual(voice.transcript, "drill a 5 mm hole in the centre")
+    }
+
+    func testPausingByHandKeepsTheWordsAndStopsTheMic() async {
+        let fake = FakeTranscriber()
+        let voice = session(fake)
+        await voice.start()
+        fake.hear("chamfer 1 mm")
+        voice.pauseListening()
+        XCTAssertEqual(voice.phase, .idle)
+        XCTAssertFalse(fake.isRunning)
+        XCTAssertEqual(voice.transcript, "chamfer 1 mm")
+    }
+
+    // MARK: Enter → Jev
+
+    func testEnterWithNothingSaidDoesNothing() async {
+        let fake = FakeTranscriber()
+        let jev = FakeClassifier()
+        let voice = session(fake, jev)
         await voice.start()
         fake.hear("   ")
         XCTAssertFalse(voice.canSubmit)
         XCTAssertNil(voice.submit(target: .nothing))
-        XCTAssertNil(voice.lastRequest)
-        XCTAssertEqual(fake.startCount, 1, "no restart when nothing was submitted")
+        await settle()
+        XCTAssertTrue(jev.asked.isEmpty)
+        XCTAssertEqual(voice.outcome, .none)
     }
 
-    func testEnterPackagesTheWordsWithTheTargetAndStartsAFreshUtterance() async {
+    func testEnterStopsListeningAndSendsTheWordsWithTheTargetToJev() async {
         let fake = FakeTranscriber()
-        let voice = session(fake)
+        let jev = FakeClassifier()
+        jev.hold = true
+        let voice = session(fake, jev)
         await voice.start()
         fake.hear("  drill a hole in the centre ")
-        XCTAssertTrue(voice.canSubmit)
 
         let request = voice.submit(target: .face(areaMM2: 800))
-        XCTAssertEqual(request, VoiceRequest(transcript: "drill a hole in the centre",
-                                             target: .face(areaMM2: 800)))
-        XCTAssertEqual(voice.lastRequest, request)
-        XCTAssertEqual(voice.transcript, "", "the next instruction starts empty")
-        XCTAssertEqual(voice.phase, .listening, "still listening after Enter")
-        XCTAssertEqual(fake.startCount, 2, "recognition restarted for the next utterance")
+        let expected = VoiceRequest(transcript: "drill a hole in the centre", target: .face(areaMM2: 800))
+        XCTAssertEqual(request, expected)
+        XCTAssertEqual(voice.phase, .idle, "Enter turns the mic off")
+        XCTAssertFalse(fake.isRunning)
+        XCTAssertEqual(fake.startCount, 1, "and does not start listening again")
+        XCTAssertEqual(voice.transcript, "")
+        XCTAssertEqual(voice.outcome, .asking(expected))
+        XCTAssertFalse(voice.canSubmit, "no second Enter while Jev is answering")
 
-        fake.hear("fillet")
-        XCTAssertEqual(voice.transcript, "fillet", "not appended to the submitted sentence")
+        await settle()
+        XCTAssertEqual(jev.asked, [expected])
+        jev.release()
+        await settle()
+        XCTAssertEqual(voice.outcome, .decided(expected, .sample()))
     }
 
-    func testStopClearsTheTranscriptAndLateWordsAreIgnored() async {
+    func testAJevFailureIsShownNotSwallowed() async {
+        let fake = FakeTranscriber()
+        let jev = FakeClassifier()
+        jev.error = JevError.unauthorized
+        let voice = session(fake, jev)
+        await voice.start()
+        fake.hear("fillet 2 mm")
+        voice.submit(target: .edges(count: 1))
+        await settle()
+        guard case .failed(_, let message) = voice.outcome else {
+            return XCTFail("expected failed, got \(voice.outcome)")
+        }
+        XCTAssertTrue(message.contains("401"), message)
+    }
+
+    func testClosingWhileJevIsAnsweringDropsTheLateReply() async {
+        let fake = FakeTranscriber()
+        let jev = FakeClassifier()
+        jev.hold = true
+        let voice = session(fake, jev)
+        await voice.start()
+        fake.hear("undo")
+        voice.submit(target: .nothing)
+        await settle()
+        voice.stop()
+        jev.release()
+        await settle()
+        XCTAssertEqual(voice.outcome, .none)
+    }
+
+    func testPickingAnOptionAfterAnUnsureAnswerConfirmsIt() async {
+        let fake = FakeTranscriber()
+        let jev = FakeClassifier()
+        jev.decision = .sample(.boss, confidence: 0.45)
+        let voice = session(fake, jev)
+        await voice.start()
+        fake.hear("put a thing here")
+        let request = voice.submit(target: .face(areaMM2: 100))!
+        await settle()
+        guard case .decided(_, let unsure) = voice.outcome else { return XCTFail("\(voice.outcome)") }
+        XCTAssertTrue(unsure.needsConfirmation)
+
+        voice.choose(.hole)
+        guard case .decided(let sameRequest, let chosen) = voice.outcome else { return XCTFail("\(voice.outcome)") }
+        XCTAssertEqual(sameRequest, request)
+        XCTAssertEqual(chosen.action, .hole)
+        XCTAssertEqual(chosen.confidence, 1)
+        XCTAssertFalse(chosen.needsConfirmation)
+    }
+
+    func testStopClearsEverythingAndLateWordsAreIgnored() async {
         let fake = FakeTranscriber()
         let voice = session(fake)
         await voice.start()
@@ -216,6 +405,7 @@ final class VoiceSessionTests: XCTestCase {
 @MainActor
 final class EditorVoiceTests: XCTestCase {
     private static var retained: [EditorViewModel] = []
+    private let jev = FakeClassifier()
 
     private func makeViewModel() throws -> (EditorViewModel, FakeTranscriber) {
         let schema = Schema([Project.self, PersistedBody.self, PersistedSketch.self,
@@ -228,7 +418,7 @@ final class EditorVoiceTests: XCTestCase {
         let vm = EditorViewModel(project: project, modelContext: context)
         Self.retained.append(vm)
         let fake = FakeTranscriber()
-        vm.voice = VoiceSession(makeTranscriber: { fake })
+        vm.voice = VoiceSession(makeTranscriber: { fake }, classifier: jev)
         return (vm, fake)
     }
 
@@ -241,10 +431,6 @@ final class EditorVoiceTests: XCTestCase {
                         revision: document.nextRevision())
         vm.session.perform(AddBodyCommand(body: body))
         return body
-    }
-
-    private func settle() async {
-        for _ in 0..<5 { await Task.yield() }
     }
 
     func testCommandShiftVIsARoutableLaunchableCommand() throws {
@@ -294,7 +480,26 @@ final class EditorVoiceTests: XCTestCase {
         XCTAssertEqual(area, 4, accuracy: 1e-6)
     }
 
-    func testEnterSendsTheWordsWithTheClickedFaceAndChangesNoGeometry() async throws {
+    /// Mac, 2026-09-28: a picked sketch rectangle (extrude arrow up) read
+    /// "Nothing selected".
+    func testAPickedSketchProfileIsTheTarget() throws {
+        let (vm, _) = try makeViewModel()
+        let sketch = Sketch(name: "Base", plane: .ground,
+                            entities: [.circle(id: UUID(), center: .zero, radius: 0.8)])
+        vm.session.perform(AddSketchCommand(sketch: sketch))
+        vm.presentSelectThrough(ray: Ray(origin: SIMD3(0.2, 20, 0.3), direction: SIMD3(0, -1, 0)))
+        let profile = try XCTUnwrap(vm.selectThroughCandidates?.first {
+            if case .profile = $0.target { return true }; return false
+        })
+        vm.chooseSelectThrough(profile)
+        XCTAssertEqual(vm.mode, .extruding)
+        guard case .sketchProfile(let area) = vm.voiceTarget else {
+            return XCTFail("expected a sketch profile, got \(vm.voiceTarget)")
+        }
+        XCTAssertEqual(area, Double.pi * 0.8 * 0.8, accuracy: 0.02, "polygonised circle")
+    }
+
+    func testEnterSendsTheWordsAndTheClickedFaceToJevAndChangesNoGeometry() async throws {
         let (vm, fake) = try makeViewModel()
         addBox(to: vm)
         vm.openVoice()
@@ -305,10 +510,15 @@ final class EditorVoiceTests: XCTestCase {
 
         let request = try XCTUnwrap(vm.submitVoice())
         XCTAssertEqual(request.transcript, "draw a hole in the center of this surface")
-        guard case .face = request.target else {
+        guard case .face(let area) = request.target else {
             return XCTFail("expected the clicked face, got \(request.target)")
         }
-        XCTAssertEqual(vm.session.changeCount, changesBefore, "V1.1 never edits the model")
-        XCTAssertTrue(vm.voiceActive, "the panel stays open for the next instruction")
+        XCTAssertEqual(area, 4, accuracy: 1e-6)
+        await settle()
+        XCTAssertEqual(jev.asked, [request])
+        XCTAssertEqual(vm.voice.outcome, .decided(request, .sample()))
+        XCTAssertEqual(vm.session.changeCount, changesBefore, "V1.2 never edits the model")
+        XCTAssertTrue(vm.voiceActive, "the panel stays open to show Jev's answer")
+        XCTAssertFalse(fake.isRunning, "and the mic is off")
     }
 }

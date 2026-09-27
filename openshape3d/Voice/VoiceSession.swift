@@ -2,10 +2,13 @@
 //  VoiceSession.swift
 //  openshape3d
 //
-//  PrintCAD V1.1: state behind the voice panel — permission, listening, the
-//  live transcript, and what Enter submits. The microphone/recognizer sits
-//  behind `SpeechTranscribing` so this logic is tested with a fake; the real
-//  one is `LiveSpeechTranscriber`.
+//  PrintCAD V1: state behind the voice panel. One utterance at a time:
+//  open → listen → (recognizer finishes after a pause, or Enter) → mic off.
+//  Enter sends the words + the current pick to Jev and shows its decision.
+//  Nothing listens continuously: the mic comes back only when the user taps it.
+//
+//  The microphone sits behind `SpeechTranscribing` and Jev behind
+//  `VoiceClassifying`, so all of this is tested with fakes.
 //
 
 import Foundation
@@ -22,11 +25,13 @@ enum SpeechAuthorization: Equatable {
 @MainActor
 protocol SpeechTranscribing: AnyObject {
     func requestAuthorization() async -> SpeechAuthorization
-    /// Start streaming. `onPartial` receives the whole transcript so far
-    /// (not a delta) every time the recognizer revises it. `onLevel` is the
-    /// input level, 0…1, for the meter. All callbacks arrive on the main actor.
+    /// Start one utterance. `onPartial` receives the utterance so far (not a
+    /// delta) each time the recognizer revises it; `onEnd` fires once when the
+    /// recognizer decides the utterance is over (the transcriber has stopped
+    /// itself by then). `onLevel` is 0…1 for the meter. Main-actor callbacks.
     func start(onPartial: @escaping (String) -> Void,
                onLevel: @escaping (Float) -> Void,
+               onEnd: @escaping () -> Void,
                onError: @escaping (String) -> Void) throws
     func stop()
 }
@@ -35,6 +40,7 @@ protocol SpeechTranscribing: AnyObject {
 @Observable
 final class VoiceSession {
     enum Phase: Equatable {
+        /// Mic off. Anything heard is kept until Enter or close.
         case idle
         case starting
         case listening
@@ -42,35 +48,54 @@ final class VoiceSession {
         case unavailable(String)
     }
 
+    /// What happened to the last thing sent with Enter.
+    enum Outcome: Equatable {
+        case none
+        case asking(VoiceRequest)
+        case decided(VoiceRequest, VoiceDecision)
+        case failed(VoiceRequest, String)
+    }
+
     private(set) var phase: Phase = .idle
-    /// Live transcript of the current utterance.
+    /// What has been heard since the last Enter (across mic pauses).
     private(set) var transcript = ""
     /// Input level 0…1 for the meter.
     private(set) var level: Float = 0
-    /// The last request Enter produced — shown in the panel in V1.1.
-    private(set) var lastRequest: VoiceRequest?
+    private(set) var outcome: Outcome = .none
 
     @ObservationIgnored private let makeTranscriber: @MainActor () -> SpeechTranscribing
     @ObservationIgnored private var transcriber: SpeechTranscribing?
+    @ObservationIgnored private let classifier: VoiceClassifying
+    /// Joins utterances when the user taps the mic again before Enter.
+    @ObservationIgnored private var heard = TranscriptAccumulator()
+    /// Bumped on every Enter/close so a slow Jev reply can't land on a newer one.
+    @ObservationIgnored private var requestToken = 0
 
     /// `makeTranscriber` is called lazily on the first `start()`, so creating
-    /// an editor (every test does) never touches audio.
-    init(makeTranscriber: (@MainActor () -> SpeechTranscribing)? = nil) {
+    /// an editor (every test does) never touches audio or the network.
+    init(makeTranscriber: (@MainActor () -> SpeechTranscribing)? = nil,
+         classifier: VoiceClassifying? = nil) {
         self.makeTranscriber = makeTranscriber ?? { LiveSpeechTranscriber() }
+        self.classifier = classifier ?? JevVoiceClassifier()
     }
 
     var isListening: Bool { phase == .listening }
 
-    /// Enter is only meaningful with something said.
-    var canSubmit: Bool {
-        !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    var isAsking: Bool {
+        if case .asking = outcome { return true }
+        return false
     }
 
+    /// Enter needs something said and no request already in flight.
+    var canSubmit: Bool {
+        !isAsking && !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Listen for one utterance. Words already heard (not yet sent) are kept
+    /// and the new ones are added after them.
     func start() async {
         guard phase != .starting, phase != .listening else { return }
         phase = .starting
-        transcript = ""
-        lastRequest = nil
         let transcriber = self.transcriber ?? makeTranscriber()
         self.transcriber = transcriber
 
@@ -83,47 +108,21 @@ final class VoiceSession {
         }
         // Closed while the permission prompt was up.
         guard phase == .starting else { return }
-        beginStreaming(transcriber)
-    }
-
-    func stop() {
-        transcriber?.stop()
-        phase = .idle
-        level = 0
-        transcript = ""
-    }
-
-    /// Enter: package what was said with what is selected. Returns nil (and
-    /// changes nothing) when nothing has been said yet. Clears the transcript
-    /// so the next instruction starts fresh, while listening continues.
-    @discardableResult
-    func submit(target: VoiceTarget) -> VoiceRequest? {
-        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        let request = VoiceRequest(transcript: text, target: target)
-        lastRequest = request
-        transcript = ""
-        // Restart recognition so the next utterance is a new transcript
-        // rather than a continuation of the one just submitted.
-        if phase == .listening, let transcriber {
-            transcriber.stop()
-            phase = .starting
-            beginStreaming(transcriber)
-        }
-        return request
-    }
-
-    private func beginStreaming(_ transcriber: SpeechTranscribing) {
         do {
             try transcriber.start(
                 onPartial: { [weak self] text in
                     guard let self, self.phase == .listening else { return }
-                    self.transcript = text
+                    self.transcript = self.heard.revise(text)
                 },
                 onLevel: { [weak self] level in self?.level = level },
+                onEnd: { [weak self] in
+                    guard let self, self.phase == .listening else { return }
+                    self.finishUtterance()
+                },
                 onError: { [weak self] message in
                     guard let self else { return }
                     self.transcriber?.stop()
+                    self.heard.segmentEnded()
                     self.level = 0
                     self.phase = .unavailable(message)
                 }
@@ -132,5 +131,71 @@ final class VoiceSession {
         } catch {
             phase = .unavailable("Couldn't start the microphone: \(error.localizedDescription)")
         }
+    }
+
+    /// Mic off, keep what was heard (the mic button while listening).
+    func pauseListening() {
+        guard phase == .listening || phase == .starting else { return }
+        transcriber?.stop()
+        finishUtterance()
+    }
+
+    /// Close: mic off, forget everything, ignore any reply still coming.
+    func stop() {
+        transcriber?.stop()
+        requestToken += 1
+        heard.reset()
+        phase = .idle
+        level = 0
+        transcript = ""
+        outcome = .none
+    }
+
+    /// Enter: stop listening and send the words + the pick to Jev. Returns the
+    /// request (nil when nothing was said or a request is already in flight).
+    @discardableResult
+    func submit(target: VoiceTarget) -> VoiceRequest? {
+        guard canSubmit else { return nil }
+        let request = VoiceRequest(
+            transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines),
+            target: target)
+        if phase == .listening || phase == .starting {
+            transcriber?.stop()
+            phase = .idle
+            level = 0
+        }
+        heard.reset()
+        transcript = ""
+        requestToken += 1
+        let token = requestToken
+        outcome = .asking(request)
+        Task { await self.ask(request, token: token) }
+        return request
+    }
+
+    /// The user picked an option after an unsure answer.
+    func choose(_ action: VoiceAction) {
+        guard case .decided(let request, var decision) = outcome else { return }
+        decision.action = action
+        decision.confidence = 1
+        outcome = .decided(request, decision)
+    }
+
+    private func ask(_ request: VoiceRequest, token: Int) async {
+        let result: Outcome
+        do {
+            result = .decided(request, try await classifier.decide(request))
+        } catch {
+            result = .failed(request, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        guard token == requestToken else { return }   // closed or superseded
+        outcome = result
+    }
+
+    private func finishUtterance() {
+        heard.segmentEnded()
+        transcript = heard.text
+        phase = .idle
+        level = 0
     }
 }
