@@ -56,6 +56,9 @@ extension CommandRegistry {
         // The launcher itself: X and Cmd+F open Command Search.
         "app.commandSearch", "app.commandSearchAlt",
 
+        // Voice Edit (PrintCAD V1): Cmd+Shift+V toggles the voice panel.
+        "app.voice",
+
         // Edit.
         "edit.undo", "edit.redo", "edit.delete",
 
@@ -178,6 +181,10 @@ extension EditorViewModel {
         // MARK: The launcher itself
         case "app.commandSearch", "app.commandSearchAlt":
             commandSearchActive = true
+            return true
+
+        case "app.voice":
+            toggleVoice()
             return true
 
         // MARK: Booleans — arm against exactly one selected body

@@ -60,3 +60,20 @@ new numeric inputs store `Expr` so they follow variables; new code in new files,
 | T3.3 | iPhone: view and edit dimensions/variables comfortably |
 | T3.4 | Mac polish: menus, shortcuts, window sizing |
 | T3.5 | AI "describe the part" on top of the existing `Agent/*` control surface |
+
+## V — Voice + point editing (approved 2026-09-28)
+
+Click a face or edge, say what to do, press Enter. Speech is transcribed on-device; TypeSafe's Jev
+classifier picks the action and labels spoken numbers (it cannot write numbers itself); Swift recipes turn
+that into existing `Agent/` ops, one undo step per command. Full plan and action catalog (groups A–N):
+`docs/printcad/VOICE.md`.
+
+| ID | Task |
+| --- | --- |
+| V1.1 | Voice panel + mic: toolbar button beside Fit View (⌘⇧V), bottom-centre card, live on-device transcript, selection chip, Enter/Esc. No AI yet |
+| V1.2 | Jev client (Keychain key, 2 s timeout, speculative call while speaking) + spoken-number parser + number-role questions + low-confidence choice buttons |
+| V1.3 | Core recipes, one undo each: hole (centre / clicked point, through / blind), fillet, chamfer, push/pull, boss, shell, undo/redo |
+| V1.4 | Conversational tweaks: "make it 6", "2 mm deeper", "same again here"; pocket, pad, delete/move face |
+| V1.5 | Body ops + view: mirror, linear/circular pattern, move/rotate, scale, duplicate, boolean, hide/delete, standard views |
+| V2 | Selection helpers: "all top edges", "opposite face", hover = "this", multi-pick |
+| V3 | Hole patterns, counterbore/countersink (after T3.1), slots, text, sketch-by-voice, variables, measure/print check, Claude fallback |
