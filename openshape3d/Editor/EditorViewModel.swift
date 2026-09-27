@@ -16273,6 +16273,13 @@ final class EditorViewModel {
     /// Whether the launcher panel is up. Set by `app.commandSearch` (X) and
     /// `app.commandSearchAlt` (⌘F) through `runCommand`.
     var commandSearchActive = false
+
+    /// PrintCAD V1 voice panel (Voice/EditorViewModel+Voice.swift). The session
+    /// only touches audio once the panel opens, so every editor can own one.
+    /// `var` so tests can swap in a session with a fake microphone.
+    var voiceActive = false
+    var voice = VoiceSession()
+
     /// Seeds the launcher's field. Non-empty when a bare letter opened it
     /// under Single Key Action — the keystroke that opened the panel is also
     /// the first thing typed into it, which is the whole point of the setting.

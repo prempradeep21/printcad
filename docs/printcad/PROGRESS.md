@@ -13,6 +13,28 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — V1.1: Voice panel + mic (Voice Edit)
+- Changed: new `openshape3d/Voice/` — `VoiceSession` (permission → listening → live transcript → Enter),
+  `LiveSpeechTranscriber` (AVAudioEngine + on-device SFSpeechRecognizer, CAD vocabulary boosted),
+  `VoicePanel` (bottom-centre card: live words, target chip, Enter/Esc), `VoiceTarget` (face/edges/bodies/nothing),
+  `EditorViewModel+Voice`. Mic button after Fit View in the toolbar, command `app.voice` (⌘⇧V, also in Command
+  Search), Escape closes the panel. Build settings: mic + speech usage strings, `ENABLE_RESOURCE_ACCESS_AUDIO_INPUT`.
+  `.gitignore`: `.env.local`, `Config/Secrets.xcconfig` (Jev key lives there, never committed).
+  Docs: `docs/printcad/VOICE.md` (plan + action catalog), ROADMAP section V, CLAUDE.md decision row.
+  Enter only shows "Would send …" — no Jev call (V1.2) and no geometry change (V1.3) yet.
+- Tests added: `VoiceEditTests.swift` — 16 (VoiceTarget 3, VoiceSession 9 with a fake microphone, editor wiring 4:
+  ⌘⇧V routable/launchable, toggle starts/stops mic, edge/body/face targets incl. 4 mm² top face, Enter leaves the
+  model untouched).
+- Test count / result: voice + command tests all pass. Full suite was stopped early at Prem's request:
+  1816 passed, 2 failed — `SignatureNamingScaleTests…IsBounded` (timing limit under parallel load) and
+  `ConstraintRailUITests.testCoincidentPointOnLineAppliesAndHistoryDeselects`; neither touches voice code, not yet
+  re-run in isolation.
+- Prem checks by hand: Mac app → 🎤 (or ⌘⇧V) → allow Speech + Microphone → click a face → speak: words appear live,
+  chip says "Face · … mm²", Enter shows "Would send …". First Mac try failed with "No microphone input was found"
+  (input node touched before the record session was active) — fixed, needs re-check.
+- Found work (not done): mic button could move beside the new Recenter button (U1); the two failing tests above
+  need an isolated re-run.
+
 ### 2026-09-28 — T0.3: Printer profile + build-volume box
 - Changed: new `openshape3d/PrintCAD/PrinterProfile.swift` (Ender 3 V3 SE constants) and
   `openshape3d/PrintCAD/BuildVolume.swift` (12 box edges, Y-up: X ±110, Z ±110, Y 0–250).

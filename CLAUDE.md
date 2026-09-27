@@ -44,6 +44,7 @@ never instantiate `DocumentSession`/`ModelContainer` in tests.
 | Kernel | OCCT through the existing `OCCTBridge` / `OCCTKernel` seam. Euclid only for live previews |
 | Units | Millimetres everywhere. No inches, no unit toggle |
 | Distribution | Personal use only. No App Store work |
+| Voice editing | Point at a face/edge + speak (task V1, approved 2026-09-28). On-device speech; TypeSafe **Jev** picks the action (it only chooses options), Swift parses numbers and builds ops via `Agent/`. Key in gitignored `.env.local`, never committed |
 | Deferred | STL import/editing, AI "describe the part", STEP, assemblies |
 
 ## Hard rules

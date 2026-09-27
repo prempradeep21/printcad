@@ -78,6 +78,11 @@ struct CommandShortcutsView: View {
                 Button { viewModel.closeCommandSearch() } label: { EmptyView() }
                     .keyboardShortcut(.cancelAction)
                     .accessibilityHidden(true)
+            } else if viewModel.voiceActive {
+                // The voice panel owns Escape while open, for the same reason.
+                Button { viewModel.closeVoice() } label: { EmptyView() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityHidden(true)
             } else if viewModel.editingDimension != nil {
                 Button { viewModel.cancelDimensionEdit() } label: { EmptyView() }
                     .keyboardShortcut(.cancelAction)

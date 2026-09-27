@@ -236,6 +236,9 @@ nonisolated struct CommandRegistry: Sendable {
                    chord: KeyChord("x")),
         AppCommand(id: "app.commandSearchAlt", title: "Command Search (Find)", category: .edit,
                    chord: KeyChord("f", .command)),
+        // PrintCAD V1: point at a face/edge and say what to do.
+        AppCommand(id: "app.voice", title: "Voice Edit", category: .edit,
+                   chord: KeyChord("v", [.command, .shift])),
 
         // Dashboard / project. The spec calls out that importing INTO the
         // current project and importing AS a new one are distinct commands.

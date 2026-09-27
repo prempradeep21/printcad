@@ -1043,6 +1043,12 @@ struct EditorView: View {
             }
             .overlay(alignment: .bottom) {
                 VStack(spacing: 10) {
+                    // Voice Edit card (PrintCAD V1) rides above everything
+                    // else at the bottom centre; the viewport stays live.
+                    if viewModel.voiceActive {
+                        VoicePanel(viewModel: viewModel)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     // Selection info strip sits above the numeric bar when
                     // both are visible (spec §16.3).
                     SelectionInfoBar(viewModel: viewModel)
@@ -1593,6 +1599,15 @@ struct EditorView: View {
                     } label: {
                         Label("Fit View", systemImage: "arrow.up.left.and.arrow.down.right")
                     }
+
+                    // Voice Edit (PrintCAD V1): point at a face/edge and say
+                    // what to do. Sits beside Fit View by Prem's request.
+                    Button {
+                        viewModel.toggleVoice()
+                    } label: {
+                        Label("Voice Edit", systemImage: viewModel.voiceActive ? "mic.fill" : "mic")
+                    }
+                    .accessibilityIdentifier("VoiceButton")
 
                     // Views popover (spec §7.3): standard views + projection,
                     // plus Display modes / Isolate / Section (spec §16).
