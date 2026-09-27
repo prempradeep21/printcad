@@ -43,6 +43,9 @@ extension EditorViewModel {
     func openVoice() {
         guard !voiceActive else { return }
         voiceActive = true
+        voice.onDecision = { [weak self] request, decision in
+            self?.applyVoiceDecision(request, decision)
+        }
         Task { await voice.start() }
     }
 
@@ -56,10 +59,14 @@ extension EditorViewModel {
         voiceActive ? closeVoice() : openVoice()
     }
 
-    /// Enter in the voice panel. V1.1 only records what would be sent to the
-    /// intent classifier; V1.2 sends it to Jev and V1.3 applies the edit.
+    /// Enter in the voice panel: freeze the picked face, then send the words
+    /// + the pick to Jev. A confident answer is applied when it arrives.
     @discardableResult
     func submitVoice() -> VoiceRequest? {
-        voice.submit(target: voiceTarget)
+        let target = voiceTarget
+        let face = currentVoiceFace
+        guard let request = voice.submit(target: target) else { return nil }
+        voiceFace = face
+        return request
     }
 }

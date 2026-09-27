@@ -234,6 +234,23 @@ final class DocumentSession {
         performRebuild(editedGraph, leadingCommands: leading, title: "Edit Feature")
     }
 
+    /// Add a NEW sketch and the feature nodes that consume it, rebuilt as ONE
+    /// undo step (PrintCAD V1.3 voice holes: circle sketch + cut). The rebuild
+    /// is evaluated against a preview that already holds the sketch — the same
+    /// trick `performWithSketchRebuild` uses — and the sketch is added by the
+    /// composite's first command, so one undo removes sketch, nodes and cut.
+    func addSketchAndRecord(_ sketch: Sketch, nodes: [FeatureNode], title: String) {
+        guard !nodes.isEmpty else { return }
+        var editedGraph = document.features
+        editedGraph.nodes.append(contentsOf: nodes)
+        let add = AddSketchCommand(sketch: sketch, title: title)
+        var preview = document
+        add.apply(to: &preview)
+        let appends: [DocumentCommand] = nodes.map { AppendFeatureCommand(node: $0, title: title) }
+        performRebuild(editedGraph, leadingCommands: [add] + appends, title: title,
+                       sketches: preview.sketches)
+    }
+
     /// Append feature nodes and rebuild in ONE undo step (the appends ride as
     /// the composite's leading commands, so a single undo removes the nodes
     /// and reverts every body they moved or made). The interactive transform

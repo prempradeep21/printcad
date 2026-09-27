@@ -16286,6 +16286,8 @@ final class EditorViewModel {
     /// `var` so tests can swap in a session with a fake microphone.
     var voiceActive = false
     var voice = VoiceSession()
+    /// The face picked when Enter was pressed (V1.3 applies decisions to it).
+    var voiceFace: VoiceFaceSnapshot?
 
     /// Seeds the launcher's field. Non-empty when a bare letter opened it
     /// under Single Key Action — the keystroke that opened the panel is also

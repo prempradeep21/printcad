@@ -13,6 +13,20 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — V1.3: Voice holes + undo/redo/views
+- Changed: `Voice/VoiceRecipe.swift` (hole size/depth from spoken numbers, default Ø5 through, M-sizes +0.2 mm,
+  area centroid of the face outline), `Voice/EditorViewModel+VoiceApply.swift` (face frozen at Enter; hidden circle
+  sketch + subtract extrude into the body; failure → undo + message, last valid model kept),
+  `DocumentSession.addSketchAndRecord` (new sketch + nodes in ONE undo step via a preview rebuild),
+  `VoiceSession.onDecision/applied` (confident answers applied, unsure ones wait for a pick), panel shows ✓/✗ line.
+  Voice also does undo, redo, top/front/isometric view, fit view.
+- Tests added: `VoiceHoleTests.swift` — sizing 7, centroid 2, real-kernel 8 (Ø5 through removes π·2.5²·2 mm³ as one
+  undo step; centre not click point; blind 4×1; click during Jev wait doesn't move hole; non-parametric body refused;
+  nothing picked; unsure waits; "undo that"). 68 voice tests pass.
+- Test count / result: 68 voice/Jev tests pass; full suite not re-run.
+- Prem checks by hand: extrude a plate, click top face, "drill a hole in the centre" → hole appears, ⌘Z removes it.
+- Found work (not done): holes at the clicked point; imported meshes can't be cut parametrically.
+
 ### 2026-09-28 — V1.2: Enter sends words + selection to Jev
 - Changed: `Voice/JevClient.swift` (POST api.typesafe.ai/v1/systemone, Bearer key, clear errors for 401/422/429/529),
   `Voice/VoiceIntent.swift` (action options filtered by selection, placement, depth, one role question per spoken

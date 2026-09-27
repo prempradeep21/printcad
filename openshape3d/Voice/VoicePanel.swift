@@ -136,6 +136,13 @@ struct VoicePanel: View {
             .accessibilityIdentifier("VoiceAsking")
         case .decided(let request, let decision):
             DecisionView(request: request, decision: decision) { voice.choose($0) }
+            if let applied = voice.applied {
+                Label(applied.message, systemImage: applied.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(applied.ok ? .green : .red)
+                    .lineLimit(3)
+                    .accessibilityIdentifier("VoiceApplied")
+            }
         case .failed(_, let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
@@ -187,8 +194,7 @@ private struct DecisionView: View {
                 }
             }
 
-            // V1.2: decisions are shown, not yet applied.
-            Text("“\(request.transcript)” · \(request.target.chipText) — not applied yet (V1.3)")
+            Text("“\(request.transcript)” · \(request.target.chipText)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(2)

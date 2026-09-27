@@ -63,6 +63,17 @@ final class VoiceSession {
     private(set) var level: Float = 0
     private(set) var outcome: Outcome = .none
 
+    /// What applying the decision did (V1.3): "Ø5 mm hole, through", or why not.
+    struct Applied: Equatable {
+        let ok: Bool
+        let message: String
+    }
+    private(set) var applied: Applied?
+
+    /// Called with a decision that is sure enough to act on (or one the user
+    /// picked). The editor applies it and answers with `reportApplied`.
+    @ObservationIgnored var onDecision: ((VoiceRequest, VoiceDecision) -> Void)?
+
     @ObservationIgnored private let makeTranscriber: @MainActor () -> SpeechTranscribing
     @ObservationIgnored private var transcriber: SpeechTranscribing?
     @ObservationIgnored private let classifier: VoiceClassifying
@@ -149,6 +160,7 @@ final class VoiceSession {
         level = 0
         transcript = ""
         outcome = .none
+        applied = nil
     }
 
     /// Enter: stop listening and send the words + the pick to Jev. Returns the
@@ -169,6 +181,7 @@ final class VoiceSession {
         requestToken += 1
         let token = requestToken
         outcome = .asking(request)
+        applied = nil
         Task { await self.ask(request, token: token) }
         return request
     }
@@ -179,6 +192,11 @@ final class VoiceSession {
         decision.action = action
         decision.confidence = 1
         outcome = .decided(request, decision)
+        onDecision?(request, decision)
+    }
+
+    func reportApplied(ok: Bool, message: String) {
+        applied = Applied(ok: ok, message: message)
     }
 
     private func ask(_ request: VoiceRequest, token: Int) async {
@@ -190,6 +208,9 @@ final class VoiceSession {
         }
         guard token == requestToken else { return }   // closed or superseded
         outcome = result
+        if case .decided(let request, let decision) = result, !decision.needsConfirmation {
+            onDecision?(request, decision)
+        }
     }
 
     private func finishUtterance() {
