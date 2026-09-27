@@ -8,7 +8,7 @@ Each milestone ends with a real print.
 | ID | Task | Acceptance |
 | --- | --- | --- |
 | T0.1 | Build, run tests, record baseline | All upstream tests pass; count logged in PROGRESS.md |
-| T0.2 | Run on Mac as "Designed for iPad"; fix anything iOS-only that breaks | Sketch → extrude → export works on Mac |
+| T0.2 | Run on Mac (Mac Catalyst); fix anything iOS-only that breaks | Sketch → extrude → export works on Mac |
 | T0.3 | Printer profile constant + ghost build-volume box 220×220×250 in viewport | Box visible, toggleable; unit test on profile values |
 | T0.4 | Export check: 3MF declares millimetres; STL bbox equals model bbox; part sits on Z=0 | New export tests pass; Prem opens a 40×30×5 box in Creality Print |
 | T0.5 | Manual: print the box | Photo in PROGRESS.md |

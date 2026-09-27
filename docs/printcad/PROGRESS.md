@@ -15,7 +15,7 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ### 2026-09-27 — T0.2: Run on Mac
 - Changed: nothing in code. Upstream's Mac Catalyst build works as-is (ad-hoc signed, command in T0.1 below).
-  Used Catalyst rather than "Designed for iPad", which would need a signing team; decision pending with Prem.
+  Used Catalyst rather than "Designed for iPad", which would need a signing team. Prem approved Catalyst as the Mac strategy (CLAUDE.md updated).
 - Tests added: none.
 - Test count / result: unchanged from T0.1.
 - Prem checked by hand: sketch → extrude → export works on the Mac app.
@@ -39,7 +39,7 @@ Newest first. Claude Code appends an entry at the end of every task.
   App: `build/DerivedData-mac/Build/Products/Debug-maccatalyst/openshape3d.app`.
 - Prem checks by hand: open the Mac app above; sketch → extrude → export works.
 - Found work (not done):
-  - Make the heavy-mesh test locale-independent (accept "1,02,749" or format with a fixed locale). Needs Prem's OK (rule 3).
+  - ~~Make the heavy-mesh test locale-independent~~ — done 2026-09-27 with Prem's OK: test also accepts "1,02,749". Suite now 1731 passed, 1 skipped, 0 failed.
   - Upstream has moved well past what SPEC/ROADMAP assume: parametric feature graph, topological naming,
     OCCT B-rep fillet/booleans and a Catalyst Mac build already exist. Re-scope M1–M2 and the M4 "native Mac UI"
     item against `docs/STATUS_AND_NEXT_STEPS.md` before starting T1.x.

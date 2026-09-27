@@ -15,7 +15,7 @@
 | --- | --- |
 | Modeling | Parametric history: a feature tree rebuilt from scratch on every change |
 | Devices | Mac and iPad equally; iPhone for viewing and editing dimensions |
-| Mac strategy | M0–M3: run as "Designed for iPad" on Apple Silicon. Native/Catalyst Mac UI is M4 |
+| Mac strategy | Native Mac Catalyst build (upstream's, already working), ad-hoc signed for local use. Mac-specific UI polish stays in M4 |
 | Kernel | OCCT through the existing `OCCTBridge` / `OCCTKernel` seam. Euclid only for live previews |
 | Units | Millimetres everywhere. No inches, no unit toggle |
 | Distribution | Personal use only. No App Store work |

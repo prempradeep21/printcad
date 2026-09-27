@@ -18,7 +18,7 @@ the `.os3d` archive doesn't carry B-rep; no parametric history. `OCCTKernel.useO
 ## 2. Target shape
 
 ```
-UI shells (iPad / Mac "Designed for iPad" / iPhone compact)
+UI shells (iPad / Mac Catalyst / iPhone compact)
         │
 EditorViewModel ── tools emit FeatureEdits, never mutate bodies
         │
@@ -105,7 +105,7 @@ with "Edge lost — reselect", never guesses. Fixture U5 is the acceptance test.
 
 | Phase | Approach | Why |
 | --- | --- | --- |
-| M0–M3 | "Designed for iPad" on Apple Silicon | Zero code; same binary and OCCT slices |
+| M0–M3 | Mac Catalyst (decided 2026-09-27) | Upstream already ships it; OCCT has an ios-arm64-maccatalyst slice; no signing team needed |
 | M4 | Mac Catalyst or native macOS target | Needs OCCT built for that platform (add a slice via `scripts/build_occt_ios.sh`, or evaluate [OCCTSwift](https://github.com/SecondMouseAU/OCCTSwift), which ships macOS + iOS) |
 
 ## 7. Files and sync

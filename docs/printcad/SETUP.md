@@ -69,7 +69,16 @@ If that simulator name doesn't exist, list them with `xcrun simctl list devices 
 
 ## 7. Run on the Mac
 
-Destination dropdown → **My Mac (Designed for iPad)** → Run.
+Native Mac Catalyst build (decided 2026-09-27; no Apple team needed):
+
+```bash
+xcodebuild build -project openshape3d.xcodeproj -scheme openshape3d \
+  -destination 'platform=macOS,variant=Mac Catalyst' -derivedDataPath build/DerivedData-mac \
+  CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+open build/DerivedData-mac/Build/Products/Debug-maccatalyst/openshape3d.app
+```
+
+In Xcode: destination **My Mac (Mac Catalyst)** → Run.
 
 ## 8. Run on your iPad
 

@@ -97,7 +97,8 @@ final class HeavyMeshGuardTests: XCTestCase {
                        ["Untitled_Scan"])
         let message = BooleanCandidacy.refusalMessage(for: heavy)
         XCTAssertTrue(message.contains("Untitled_Scan"))
-        XCTAssertTrue(message.contains("102,749") || message.contains("102 749") || message.contains("102.749"),
+        XCTAssertTrue(message.contains("102,749") || message.contains("102 749") || message.contains("102.749")
+                      || message.contains("1,02,749"),  // en_IN lakh grouping
                       "the message names the triangle count: \(message)")
         XCTAssertTrue(message.contains("New Body"))
     }
