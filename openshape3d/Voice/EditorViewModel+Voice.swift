@@ -36,7 +36,9 @@ extension EditorViewModel {
         case .pickingBlendEdges:
             return blendSelectedEdges.isEmpty ? .nothing : .edges(count: blendSelectedEdges.count)
         default:
-            return selection.isEmpty ? .nothing : .bodies(count: selection.count)
+            if !selection.isEmpty { return .bodies(count: selection.count) }
+            // Nothing clicked: the face under the pointer (Mac hover).
+            return hoveredVoiceFace.map { .face(areaMM2: $0.area) } ?? .nothing
         }
     }
 
@@ -59,14 +61,14 @@ extension EditorViewModel {
         voiceActive ? closeVoice() : openVoice()
     }
 
-    /// Enter in the voice panel: freeze the picked face, then send the words
+    /// Enter in the voice panel: freeze the pick, then send the words
     /// + the pick to Jev. A confident answer is applied when it arrives.
     @discardableResult
     func submitVoice() -> VoiceRequest? {
-        let target = voiceTarget
-        let face = currentVoiceFace
-        guard let request = voice.submit(target: target) else { return nil }
-        voiceFace = face
+        let pick = currentVoicePick
+        guard let request = voice.submit(target: voiceTarget,
+                                         variables: session.document.variables.map(\.name)) else { return nil }
+        voicePick = pick
         return request
     }
 }

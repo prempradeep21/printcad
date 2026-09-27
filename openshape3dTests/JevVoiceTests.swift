@@ -53,6 +53,13 @@ final class SpokenNumberParserTests: XCTestCase {
         XCTAssertEqual(angle.first?.phrase, "90°")
     }
 
+    func testPercentages() {
+        let numbers = SpokenNumberParser.numbers(in: "scale it to 150% then 80 percent")
+        XCTAssertEqual(numbers.map(\.value), [150, 80])
+        XCTAssertEqual(numbers.map(\.unit), [.percent, .percent])
+        XCTAssertEqual(numbers.first?.phrase, "150%")
+    }
+
     func testCountsWithoutUnits() {
         let numbers = SpokenNumberParser.numbers(in: "make 4 copies")
         XCTAssertEqual(numbers.map(\.value), [4])
@@ -72,131 +79,177 @@ final class SpokenNumberParserTests: XCTestCase {
 
 // MARK: - Request
 
+/// Builds a reply for EVERY question in `request`: the given choices, else a
+/// neutral option (not_applicable / picked / none / other).
+enum JevFixture {
+    static func reply(for request: JevRequest, _ choices: [String: String],
+                      confidence: [String: Double] = [:], model: String = "jev-1.13.0") -> VoiceIntent.Response {
+        var answers: [String: VoiceIntent.Response.Answer] = [:]
+        for (key, question) in request.questions {
+            let options = question.criteria.keys
+            let choice = choices[key]
+                ?? ["not_applicable", "picked", "none", "other"].first { options.contains($0) }
+                ?? options.sorted()[0]
+            precondition(options.contains(choice), "\(choice) is not an option of \(key)")
+            let p = confidence[key] ?? 1
+            var probabilities = Dictionary(uniqueKeysWithValues: options.map { ($0, 0.0) })
+            probabilities[choice] = p
+            if p < 1, let other = options.first(where: { $0 != choice && $0 != "not_understood" }) {
+                probabilities[other] = 1 - p
+            }
+            answers[key] = .init(type: "choice", choice: choice, confidence: p, probabilities: probabilities)
+        }
+        return VoiceIntent.Response(model: model, answers: answers)
+    }
+
+    static func json(_ response: VoiceIntent.Response) -> Data {
+        let answers = response.answers.mapValues { a -> [String: Any] in
+            ["type": a.type, "choice": a.choice as Any, "confidence": a.confidence as Any,
+             "probabilities": a.probabilities as Any]
+        }
+        return try! JSONSerialization.data(withJSONObject: ["model": response.model, "answers": answers,
+                                                            "usage": ["input_tokens": 1, "output_tokens": 1]])
+    }
+}
+
 final class JevRequestTests: XCTestCase {
-    func testTheHoleUseCaseAsksActionPlacementDepthAndOneRolePerNumber() throws {
+    func testOneStepAsksActionTargetAndSlotsPlusOneRolePerNumber() throws {
         let request = VoiceRequest(transcript: "3 mm hole here, 4 mm deep", target: .face(areaMM2: 800))
-        let numbers = SpokenNumberParser.numbers(in: request.transcript)
-        let jev = VoiceIntent.jevRequest(for: request, numbers: numbers)
+        let jev = VoiceIntent.jevRequest(for: request)
 
         XCTAssertEqual(jev.model, "jev-latest")
         XCTAssertEqual(jev.state.transcript, "3 mm hole here, 4 mm deep")
         XCTAssertEqual(jev.state.selection, "one face, area 800 mm²")
-        XCTAssertEqual(jev.state.numbers, ["n1": "3 mm (1st number)", "n2": "4 mm (2nd number)"])
-        XCTAssertEqual(Set(jev.questions.keys), ["action", "placement", "depth", "role_n1", "role_n2"])
+        XCTAssertEqual(jev.state.steps, ["s1": "3 mm hole here 4 mm deep"], "commas inside a step are dropped")
+        XCTAssertEqual(jev.state.numbers, ["s1_n1": "3 mm (1st number in s1)", "s1_n2": "4 mm (2nd number in s1)"])
+        XCTAssertEqual(Set(jev.questions.keys), ["s1_action", "s1_target", "s1_placement", "s1_depth",
+                                                 "s1_direction", "s1_axis", "s1_relative",
+                                                 "s1_n1_role", "s1_n2_role"])
         XCTAssertTrue(jev.questions.values.allSatisfy { $0.type == "choice" })
-        XCTAssertEqual(Set(jev.questions["role_n1"]!.criteria.keys), Set(NumberRole.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(jev.questions["s1_n1_role"]!.criteria.keys), Set(NumberRole.allCases.map(\.rawValue)))
     }
 
-    func testActionOptionsAreFilteredByWhatIsSelected() {
-        func actions(_ target: VoiceTarget) -> Set<String> {
-            let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "x", target: target), numbers: [])
-            return Set(jev.questions["action"]!.criteria.keys)
+    func testAMultiStepCommandGetsQuestionsPerStepInOneRequest() {
+        let request = VoiceRequest(
+            transcript: "drill a 5 mm hole in the centre, then fillet the top edges 1 mm and mirror it",
+            target: .face(areaMM2: 800))
+        let jev = VoiceIntent.jevRequest(for: request)
+        XCTAssertEqual(jev.state.steps, ["s1": "drill a 5 mm hole in the centre",
+                                         "s2": "fillet the top edges 1 mm",
+                                         "s3": "mirror it"])
+        for s in ["s1", "s2", "s3"] {
+            XCTAssertNotNil(jev.questions["\(s)_action"], s)
+            XCTAssertNotNil(jev.questions["\(s)_target"], s)
         }
-        XCTAssertTrue(actions(.face(areaMM2: 1)).contains("hole"))
-        XCTAssertFalse(actions(.face(areaMM2: 1)).contains("fillet_edges"))
-        XCTAssertTrue(actions(.edges(count: 1)).isSuperset(of: ["fillet_edges", "chamfer_edges"]))
-        XCTAssertFalse(actions(.edges(count: 1)).contains("hole"))
-        XCTAssertTrue(actions(.sketchProfile(areaMM2: 1)).contains("extrude_profile"))
-        XCTAssertEqual(actions(.nothing), ["undo", "redo", "view_top", "view_front", "view_isometric",
-                                           "fit_view", "export_stl", "not_understood"])
-        for target in [VoiceTarget.face(areaMM2: 1), .edges(count: 1), .sketchProfile(areaMM2: 1),
-                       .bodies(count: 1), .nothing] {
-            XCTAssertTrue(actions(target).contains("not_understood"), "\(target)")
-            XCTAssertLessThanOrEqual(actions(target).count, 255, "Jev's per-question limit")
-        }
+        XCTAssertNotNil(jev.questions["s2_n1_role"])
+        XCTAssertNil(jev.questions["s3_n1_role"])
+    }
+
+    func testEveryActionAndTargetIsOfferedWithinJevsLimit() {
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "x", target: .nothing))
+        XCTAssertEqual(Set(jev.questions["s1_action"]!.criteria.keys), Set(VoiceAction.allCases.map(\.rawValue)))
+        XCTAssertEqual(Set(jev.questions["s1_target"]!.criteria.keys), Set(VoiceTargetChoice.allCases.map(\.rawValue)))
+        XCTAssertLessThanOrEqual(VoiceAction.allCases.count, 255, "Jev's per-question limit")
+    }
+
+    func testVariablesAddAVariableQuestion() {
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "set wall to 2", target: .nothing),
+                                         variables: ["wall", "bolt_d"])
+        XCTAssertEqual(Set(jev.questions["s1_variable"]!.criteria.keys), ["wall", "bolt_d", "none"])
+        XCTAssertEqual(jev.state.variables, ["wall", "bolt_d"])
     }
 
     func testNoNumbersMeansNoNumbersInStateAndNoRoleQuestions() throws {
         let jev = VoiceIntent.jevRequest(
-            for: VoiceRequest(transcript: "drill a hole in the centre", target: .face(areaMM2: 4)), numbers: [])
+            for: VoiceRequest(transcript: "drill a hole in the centre", target: .face(areaMM2: 4)))
         XCTAssertNil(jev.state.numbers)
-        XCTAssertFalse(jev.questions.keys.contains { $0.hasPrefix("role_") })
-        // Encodes as the API expects: numbers omitted, not null.
+        XCTAssertFalse(jev.questions.keys.contains { $0.hasSuffix("_role") })
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(jev)) as! [String: Any]
         let state = json["state"] as! [String: Any]
-        XCTAssertNil(state["numbers"])
-        XCTAssertEqual((json["questions"] as! [String: Any]).count, 3)
+        XCTAssertNil(state["numbers"], "omitted, not null")
+        XCTAssertNil(state["variables"])
     }
 }
 
 // MARK: - Response → decision
 
 final class JevDecisionTests: XCTestCase {
-    /// Shape of the live reply recorded on 2026-09-28.
-    static let liveReply = """
-    {"model":"jev-1.13.0","answers":{
-      "action":{"type":"choice","choice":"hole","confidence":1.0,
-                "probabilities":{"fillet_edges":0.0,"hole":1.0,"boss":0.0,"not_understood":0.0}},
-      "placement":{"type":"choice","choice":"face_center","confidence":1.0,
-                   "probabilities":{"face_center":1.0,"clicked_point":0.0,"not_applicable":0.0}},
-      "depth":{"type":"choice","choice":"through_all","confidence":1.0,
-               "probabilities":{"through_all":1.0,"blind":0.0,"not_applicable":0.0}}},
-     "usage":{"input_tokens":720,"output_tokens":178}}
-    """
+    private func decide(_ transcript: String, _ choices: [String: String],
+                        confidence: [String: Double] = [:]) throws -> VoiceDecision {
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: transcript, target: .face(areaMM2: 800)))
+        return try VoiceIntent.decision(from: JevFixture.reply(for: jev, choices, confidence: confidence),
+                                        for: jev, latency: 0.42)
+    }
 
-    func testTheLiveReplyBecomesAHoleAtTheCentreThroughAll() throws {
-        let reply = try JSONDecoder().decode(VoiceIntent.Response.self, from: Data(Self.liveReply.utf8))
-        let decision = try VoiceIntent.decision(from: reply, numbers: [], latency: 0.42)
-        XCTAssertEqual(decision.action, .hole)
-        XCTAssertEqual(decision.placement, .faceCenter)
-        XCTAssertEqual(decision.depth, .throughAll)
-        XCTAssertEqual(decision.confidence, 1)
+    /// The live answer to Prem's own sentence (2026-09-28): hole / centre / through.
+    func testTheHoleUseCaseBecomesOneHoleStep() throws {
+        let decision = try decide("draw a hole in the center of this surface",
+                                  ["s1_action": "hole", "s1_placement": "face_center", "s1_depth": "through_all"])
+        XCTAssertEqual(decision.steps.count, 1)
+        let step = decision.steps[0]
+        XCTAssertEqual(step.action, .hole)
+        XCTAssertEqual(step.target, .picked)
+        XCTAssertEqual(step.placement, .faceCenter)
+        XCTAssertEqual(step.depth, .throughAll)
         XCTAssertEqual(decision.model, "jev-1.13.0")
         XCTAssertEqual(decision.latency, 0.42)
         XCTAssertFalse(decision.needsConfirmation)
-        XCTAssertEqual(decision.alternatives.first?.action, .hole)
     }
 
-    func testNumberRolesAreAttachedInOrder() throws {
-        let numbers = SpokenNumberParser.numbers(in: "3 mm hole here, 4 mm deep")
-        let reply = VoiceIntent.Response(model: "jev-1.13.0", answers: [
-            "action": .init(type: "choice", choice: "hole", confidence: 0.95, probabilities: ["hole": 0.97]),
-            "placement": .init(type: "choice", choice: "clicked_point", confidence: 0.9, probabilities: nil),
-            "depth": .init(type: "choice", choice: "blind", confidence: 1, probabilities: nil),
-            "role_n1": .init(type: "choice", choice: "diameter", confidence: 0.99, probabilities: nil),
-            "role_n2": .init(type: "choice", choice: "depth", confidence: 1, probabilities: nil),
+    func testStepsKeepTheirOwnActionsTargetsAndNumbers() throws {
+        let decision = try decide("drill a 5 mm hole, then fillet the top edges 1 mm", [
+            "s1_action": "hole", "s1_n1_role": "diameter",
+            "s2_action": "fillet_edges", "s2_target": "top_edges", "s2_n1_role": "radius",
         ])
-        let decision = try VoiceIntent.decision(from: reply, numbers: numbers, latency: 0.5)
-        XCTAssertEqual(decision.numbers.map(\.role), [.diameter, .depth])
-        XCTAssertEqual(decision.numbers.map(\.number.value), [3, 4])
-        XCTAssertEqual(decision.placement, .clickedPoint)
-        XCTAssertEqual(decision.depth, .blind)
+        XCTAssertEqual(decision.steps.map(\.action), [.hole, .filletEdges])
+        XCTAssertEqual(decision.steps.map(\.target), [.picked, .topEdges])
+        XCTAssertEqual(decision.steps[0].number(.diameter)?.value, 5)
+        XCTAssertEqual(decision.steps[1].number(.radius)?.value, 1)
+        XCTAssertEqual(decision.steps[1].text, "fillet the top edges 1 mm")
     }
 
-    func testLowConfidenceOrNotUnderstoodAsksInsteadOfActing() {
-        var decision = VoiceDecision.sample(.boss, confidence: 0.45)
+    func testAnyUnsureStepAsksBeforeAnythingRuns() throws {
+        let decision = try decide("drill a hole then do the thing",
+                                  ["s1_action": "hole", "s2_action": "boss"],
+                                  confidence: ["s2_action": 0.4])
+        XCTAssertEqual(decision.unsureStepIndex, 1)
         XCTAssertTrue(decision.needsConfirmation)
-        decision = .sample(.notUnderstood, confidence: 0.9)
-        XCTAssertTrue(decision.needsConfirmation)
-        XCTAssertFalse(VoiceDecision.sample(.hole, confidence: 0.8).needsConfirmation)
+        XCTAssertEqual(decision.confidence, 0.4, accuracy: 1e-9)
+        XCTAssertTrue(decision.steps[1].suggestions.map(\.action).contains(.boss))
     }
 
-    func testSuggestionsAreTheTopThreeRealOptions() {
-        let decision = VoiceDecision(
-            action: .boss, confidence: 0.4,
-            alternatives: [.init(action: .boss, probability: 0.4), .init(action: .notUnderstood, probability: 0.3),
-                           .init(action: .hole, probability: 0.2), .init(action: .pocket, probability: 0.08),
-                           .init(action: .moveFace, probability: 0.015)],
-            placement: .notApplicable, depth: .notApplicable, numbers: [], model: "m", latency: 0)
-        XCTAssertEqual(decision.suggestions.map(\.action), [.boss, .hole, .pocket])
+    func testNotUnderstoodAlwaysAsks() {
+        XCTAssertTrue(VoiceStep.sample(.notUnderstood, confidence: 0.95).needsConfirmation)
+        XCTAssertFalse(VoiceStep.sample(.hole, confidence: 0.8).needsConfirmation)
     }
 
-    func testAnAnswerThatIsNotAnOptionIsAnErrorNotAGuess() {
-        let reply = VoiceIntent.Response(model: "m", answers: [
-            "action": .init(type: "choice", choice: "teleport", confidence: 1, probabilities: nil),
-            "placement": .init(type: "choice", choice: "face_center", confidence: 1, probabilities: nil),
-            "depth": .init(type: "choice", choice: "blind", confidence: 1, probabilities: nil),
-        ])
-        XCTAssertThrowsError(try VoiceIntent.decision(from: reply, numbers: [], latency: 0)) {
-            XCTAssertEqual($0 as? VoiceIntent.DecodeError, .unknownOption("action", "teleport"))
+    func testAnAnswerThatIsNotAnOptionIsAnErrorNotAGuess() throws {
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "x", target: .nothing))
+        var reply = JevFixture.reply(for: jev, [:])
+        var answers = reply.answers
+        answers["s1_action"] = .init(type: "choice", choice: "teleport", confidence: 1, probabilities: nil)
+        reply = VoiceIntent.Response(model: "m", answers: answers)
+        XCTAssertThrowsError(try VoiceIntent.decision(from: reply, for: jev, latency: 0)) {
+            XCTAssertEqual($0 as? VoiceIntent.DecodeError, .unknownOption("s1_action", "teleport"))
         }
     }
 
     func testAMissingAnswerIsAnError() {
-        let reply = VoiceIntent.Response(model: "m", answers: [:])
-        XCTAssertThrowsError(try VoiceIntent.decision(from: reply, numbers: [], latency: 0)) {
-            XCTAssertEqual($0 as? VoiceIntent.DecodeError, .missingAnswer("action"))
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "x", target: .nothing))
+        XCTAssertThrowsError(try VoiceIntent.decision(from: .init(model: "m", answers: [:]), for: jev, latency: 0)) {
+            XCTAssertEqual($0 as? VoiceIntent.DecodeError, .missingAnswer("s1_action"))
         }
+    }
+
+    func testTheVariableAnswerIsReadAndNoneMeansNone() throws {
+        let jev = VoiceIntent.jevRequest(for: VoiceRequest(transcript: "set wall to 2", target: .nothing),
+                                         variables: ["wall"])
+        let named = try VoiceIntent.decision(
+            from: JevFixture.reply(for: jev, ["s1_action": "set_variable", "s1_variable": "wall", "s1_n1_role": "other"]),
+            for: jev, latency: 0)
+        XCTAssertEqual(named.steps[0].variable, "wall")
+        let none = try VoiceIntent.decision(from: JevFixture.reply(for: jev, [:]), for: jev, latency: 0)
+        XCTAssertNil(none.steps[0].variable)
     }
 }
 
@@ -247,15 +300,17 @@ final class JevClientTests: XCTestCase {
 
     override func setUp() {
         StubURLProtocol.status = 200
-        StubURLProtocol.body = Data(JevDecisionTests.liveReply.utf8)
+        let jev = VoiceIntent.jevRequest(for: request)
+        StubURLProtocol.body = JevFixture.json(JevFixture.reply(
+            for: jev, ["s1_action": "hole", "s1_placement": "face_center", "s1_depth": "through_all"]))
         StubURLProtocol.lastRequest = nil
         StubURLProtocol.lastBody = nil
     }
 
     func testPostsToSystemOneWithTheBearerKeyAndReadsTheDecision() async throws {
         let decision = try await client().decide(request)
-        XCTAssertEqual(decision.action, .hole)
-        XCTAssertEqual(decision.placement, .faceCenter)
+        XCTAssertEqual(decision.steps.map(\.action), [.hole])
+        XCTAssertEqual(decision.steps[0].placement, .faceCenter)
 
         let sent = try XCTUnwrap(StubURLProtocol.lastRequest)
         XCTAssertEqual(sent.url?.absoluteString, "https://api.typesafe.ai/v1/systemone")

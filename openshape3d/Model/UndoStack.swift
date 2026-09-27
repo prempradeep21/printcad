@@ -40,6 +40,19 @@ final class UndoStack {
         command.apply(to: &document)
     }
 
+    /// Fold every step performed after the stack held `depth` commands into
+    /// ONE step titled `title` (PrintCAD voice: a multi-step command undoes
+    /// as a unit). Nothing is re-applied — the document already has them.
+    /// Returns false (and changes nothing) when there is nothing to fold.
+    @discardableResult
+    func coalesce(from depth: Int, title: String) -> Bool {
+        guard depth >= 0, undoCommands.count - depth >= 1 else { return false }
+        let folded = Array(undoCommands[depth...])
+        undoCommands.removeSubrange(depth...)
+        undoCommands.append(CompositeCommand(title: title, commands: folded))
+        return true
+    }
+
     func undo(on document: inout DesignDocument) {
         guard let command = undoCommands.popLast() else { return }
         command.revert(in: &document)

@@ -13,7 +13,7 @@ import Foundation
 struct SpokenNumber: Equatable {
     /// Millimetres for lengths (cm is converted); plain value otherwise.
     let value: Double
-    enum Unit: Equatable { case millimetre, degree, none }
+    enum Unit: Equatable { case millimetre, degree, percent, none }
     let unit: Unit
     /// "M3" style fastener size: `value` is the nominal diameter.
     let isFastenerSize: Bool
@@ -25,6 +25,7 @@ struct SpokenNumber: Equatable {
         switch unit {
         case .millimetre: return "\(number) mm"
         case .degree: return "\(number)°"
+        case .percent: return "\(number)%"
         case .none: return number
         }
     }
@@ -76,7 +77,7 @@ enum SpokenNumberParser {
 
     /// Lowercased words and numbers; "5mm" → "5", "mm"; "2.5" stays whole.
     private static func tokenize(_ text: String) -> [String] {
-        let pattern = #"m\d+(?:\.\d+)?|\d+(?:\.\d+)?|[a-z]+"#
+        let pattern = #"m\d+(?:\.\d+)?|\d+(?:\.\d+)?|[a-z]+|%"#
         let lower = text.lowercased()
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(lower.startIndex..., in: lower)
@@ -98,6 +99,8 @@ enum SpokenNumberParser {
             return (.millimetre, 10)
         case "degree", "degrees", "deg":
             return (.degree, 1)
+        case "%", "percent", "per":
+            return (.percent, 1)
         default:
             return nil
         }

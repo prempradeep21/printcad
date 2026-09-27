@@ -61,9 +61,10 @@ enum VoiceTarget: Equatable {
     }
 }
 
-/// What pressing Enter produces. In V1.1 it is only shown in the panel
-/// ("would send …"); from V1.2 it is the input to the Jev request.
+/// What pressing Enter produces: the input to the Jev request.
 struct VoiceRequest: Equatable {
     let transcript: String
     let target: VoiceTarget
+    /// The document's variable names, so "set wall to 2" can name one.
+    var variables: [String] = []
 }

@@ -68,6 +68,8 @@ classifier picks the action and labels spoken numbers (it cannot write numbers i
 that into existing `Agent/` ops, one undo step per command. Full plan and action catalog (groups A–N):
 `docs/printcad/VOICE.md`.
 
+Status 2026-09-28: V1.1–V1.5 and V2 selection helpers/hover built; V3 partly — see the Status block in VOICE.md.
+
 | ID | Task |
 | --- | --- |
 | V1.1 | Voice panel + mic: toolbar button beside Fit View (⌘⇧V), bottom-centre card, live on-device transcript, selection chip, Enter/Esc. No AI yet |

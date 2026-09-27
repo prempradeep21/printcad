@@ -166,11 +166,11 @@ final class VoiceSession {
     /// Enter: stop listening and send the words + the pick to Jev. Returns the
     /// request (nil when nothing was said or a request is already in flight).
     @discardableResult
-    func submit(target: VoiceTarget) -> VoiceRequest? {
+    func submit(target: VoiceTarget, variables: [String] = []) -> VoiceRequest? {
         guard canSubmit else { return nil }
         let request = VoiceRequest(
             transcript: transcript.trimmingCharacters(in: .whitespacesAndNewlines),
-            target: target)
+            target: target, variables: variables)
         if phase == .listening || phase == .starting {
             transcriber?.stop()
             phase = .idle
@@ -186,13 +186,17 @@ final class VoiceSession {
         return request
     }
 
-    /// The user picked an option after an unsure answer.
+    /// The user picked an option for the first unsure step. Once no step is
+    /// unsure, the whole command runs.
     func choose(_ action: VoiceAction) {
-        guard case .decided(let request, var decision) = outcome else { return }
-        decision.action = action
-        decision.confidence = 1
+        guard case .decided(let request, var decision) = outcome,
+              let index = decision.unsureStepIndex else { return }
+        decision.steps[index].action = action
+        decision.steps[index].confidence = 1
         outcome = .decided(request, decision)
-        onDecision?(request, decision)
+        if !decision.needsConfirmation {
+            onDecision?(request, decision)
+        }
     }
 
     func reportApplied(ok: Bool, message: String) {

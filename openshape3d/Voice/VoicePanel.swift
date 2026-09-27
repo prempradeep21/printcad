@@ -153,7 +153,7 @@ struct VoicePanel: View {
     }
 }
 
-/// Jev's answer: the action and its details, or — when unsure — options.
+/// Jev's answer: one line per step, and — for an unsure step — options.
 private struct DecisionView: View {
     let request: VoiceRequest
     let decision: VoiceDecision
@@ -164,7 +164,7 @@ private struct DecisionView: View {
             HStack(spacing: 6) {
                 Text("Jev:")
                     .foregroundStyle(.secondary)
-                Text(summary)
+                Text(decision.steps.count == 1 ? summary(decision.steps[0]) : "\(decision.steps.count) steps")
                     .fontWeight(.semibold)
                 Spacer(minLength: 8)
                 Text("\(Int((decision.confidence * 100).rounded()))% · \(String(format: "%.2f", decision.latency)) s")
@@ -173,18 +173,25 @@ private struct DecisionView: View {
             }
             .font(.callout)
 
-            if !decision.numbers.isEmpty {
-                Text(decision.numbers.map { "\($0.number.phrase) = \($0.role.rawValue)" }.joined(separator: " · "))
+            if decision.steps.count > 1 {
+                ForEach(Array(decision.steps.enumerated()), id: \.offset) { index, step in
+                    Text("\(index + 1). \(summary(step))")
+                        .font(.caption)
+                        .foregroundStyle(step.needsConfirmation ? .orange : .secondary)
+                }
+            } else if let step = decision.steps.first, !step.numbers.isEmpty {
+                Text(step.numbers.map { "\($0.number.phrase) = \($0.role.rawValue)" }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if decision.needsConfirmation, !decision.suggestions.isEmpty {
+            if let index = decision.unsureStepIndex {
+                let step = decision.steps[index]
                 HStack(spacing: 6) {
-                    Text("Not sure — did you mean:")
+                    Text(decision.steps.count > 1 ? "Step \(index + 1) — did you mean:" : "Not sure — did you mean:")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(decision.suggestions, id: \.action) { option in
+                    ForEach(step.suggestions, id: \.action) { option in
                         Button("\(option.action.title) \(Int((option.probability * 100).rounded()))%") {
                             choose(option.action)
                         }
@@ -203,14 +210,16 @@ private struct DecisionView: View {
         .accessibilityIdentifier("VoiceDecision")
     }
 
-    private var summary: String {
-        var parts = [decision.action.title]
-        if decision.placement != .notApplicable {
-            parts.append(decision.placement == .faceCenter ? "centre" : "where clicked")
+    private func summary(_ step: VoiceStep) -> String {
+        var parts = [step.action.title]
+        if step.target != .picked && step.target != .nothing {
+            parts.append(step.target.rawValue.replacingOccurrences(of: "_", with: " "))
         }
-        if decision.depth != .notApplicable {
-            parts.append(decision.depth == .throughAll ? "through all" : "blind")
-        }
+        if step.placement == .clickedPoint { parts.append("where clicked") }
+        if step.placement == .corners { parts.append("corners") }
+        if step.depth == .throughAll, [.hole, .cornerHoles, .pocket].contains(step.action) { parts.append("through") }
+        let numbers = step.numbers.map(\.number.phrase)
+        if !numbers.isEmpty { parts.append(numbers.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
     }
 }

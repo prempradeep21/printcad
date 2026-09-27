@@ -79,6 +79,25 @@ final class AgentBridge {
 
     // MARK: Serving the editor routes
 
+    // MARK: - In-app callers (PrintCAD voice editing)
+
+    /// Run one exec op against a SPECIFIC editor — the same code path, reply
+    /// and undo behaviour as `POST /v1/exec`, without the HTTP router or the
+    /// registered-editor lookup. Voice Edit builds its actions on these.
+    func perform(_ op: AgentExecOp, on viewModel: EditorViewModel) -> AgentResponse {
+        execute(op, on: viewModel)
+    }
+
+    /// `GET /v1/faces?body=` for a specific editor.
+    func faces(of bodyID: BodyID, on viewModel: EditorViewModel) -> AgentResponse {
+        listFaces(bodyID: bodyID.raw.uuidString, on: viewModel)
+    }
+
+    /// `GET /v1/edges?body=` for a specific editor.
+    func edges(of bodyID: BodyID, on viewModel: EditorViewModel) -> AgentResponse {
+        listEdges(bodyID: bodyID.raw.uuidString, on: viewModel)
+    }
+
     func handle(_ route: AgentRoute) -> AgentResponse {
         guard let viewModel else {
             return .failure(409, "Conflict", error: "no_document",

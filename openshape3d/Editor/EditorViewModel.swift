@@ -6136,6 +6136,8 @@ final class EditorViewModel {
     /// Shapr3D: a single tap on a body selects the planar face under it.
     private func selectFaceOrBody(ray: Ray) {
         let bodyHit = HitTester.pickBody(ray: ray, in: scene)
+        // Voice Edit's "a hole HERE" needs the exact spot that was tapped.
+        voicePickPoint = bodyHit.map { SIMD3<Double>($0.worldPoint) }
 
         // Multi-select chip (plan §B13, spec §8.1): additive taps toggle
         // whole bodies in and out of the selection; an empty tap keeps the
@@ -16286,8 +16288,12 @@ final class EditorViewModel {
     /// `var` so tests can swap in a session with a fake microphone.
     var voiceActive = false
     var voice = VoiceSession()
-    /// The face picked when Enter was pressed (V1.3 applies decisions to it).
-    var voiceFace: VoiceFaceSnapshot?
+    /// What was picked when Enter was pressed (decisions apply to it).
+    var voicePick: VoicePick?
+    /// The last voice command that changed the model ("same again").
+    var lastVoiceSteps: [VoiceStep]?
+    /// World point of the last body/face tap ("here" in a voice command).
+    var voicePickPoint: SIMD3<Double>?
 
     /// Seeds the launcher's field. Non-empty when a bare letter opened it
     /// under Single Key Action — the keystroke that opened the panel is also

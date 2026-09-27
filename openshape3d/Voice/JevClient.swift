@@ -69,8 +69,8 @@ struct JevVoiceClassifier: VoiceClassifying {
 
     func decide(_ request: VoiceRequest) async throws -> VoiceDecision {
         guard let apiKey else { throw JevError.missingKey }
-        let numbers = SpokenNumberParser.numbers(in: request.transcript)
-        let body = try JSONEncoder().encode(VoiceIntent.jevRequest(for: request, numbers: numbers))
+        let jevRequest = VoiceIntent.jevRequest(for: request, variables: request.variables)
+        let body = try JSONEncoder().encode(jevRequest)
 
         var http = URLRequest(url: Self.endpoint, timeoutInterval: timeout)
         http.httpMethod = "POST"
@@ -98,6 +98,6 @@ struct JevVoiceClassifier: VoiceClassifying {
         guard let reply = try? JSONDecoder().decode(VoiceIntent.Response.self, from: data) else {
             throw JevError.unreadableReply
         }
-        return try VoiceIntent.decision(from: reply, numbers: numbers, latency: latency)
+        return try VoiceIntent.decision(from: reply, for: jevRequest, latency: latency)
     }
 }

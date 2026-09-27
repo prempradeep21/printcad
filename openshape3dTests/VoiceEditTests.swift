@@ -92,12 +92,36 @@ final class FakeClassifier: VoiceClassifying {
     }
 }
 
+extension VoiceStep {
+    /// A step as Jev might answer it. `numbers` pairs spoken text with the
+    /// role Jev gave it, e.g. [("7 mm", .diameter)].
+    static func sample(_ action: VoiceAction = .hole, confidence: Double = 1,
+                       target: VoiceTargetChoice = .picked, placement: VoicePlacement = .faceCenter,
+                       depth: VoiceDepth = .throughAll, direction: VoiceDirection = .notApplicable,
+                       axis: VoiceAxis = .notApplicable, relative: VoiceRelative = .notApplicable,
+                       variable: String? = nil, numbers: [(String, NumberRole)] = [],
+                       text: String? = nil) -> VoiceStep {
+        let spoken = numbers.map(\.0).joined(separator: " ")
+        let parsed = SpokenNumberParser.numbers(in: spoken)
+        precondition(parsed.count == numbers.count, "fixture numbers must each parse to one number")
+        return VoiceStep(
+            text: text ?? ([action.rawValue] + numbers.map(\.0)).joined(separator: " "),
+            action: action, confidence: confidence,
+            alternatives: [.init(action: action, probability: confidence)] +
+                (action == .hole ? [] : [.init(action: .hole, probability: max(0, 1 - confidence))]),
+            target: target, placement: placement, depth: depth, direction: direction, axis: axis,
+            relative: relative, variable: variable,
+            numbers: zip(parsed, numbers).map { .init(number: $0, role: $1.1, confidence: 1) })
+    }
+}
+
 extension VoiceDecision {
     static func sample(_ action: VoiceAction = .hole, confidence: Double = 1) -> VoiceDecision {
-        VoiceDecision(action: action, confidence: confidence,
-                      alternatives: [.init(action: action, probability: confidence)],
-                      placement: .faceCenter, depth: .throughAll, numbers: [],
-                      model: "jev-test", latency: 0.4)
+        VoiceDecision(steps: [.sample(action, confidence: confidence)], model: "jev-test", latency: 0.4)
+    }
+
+    static func steps(_ steps: VoiceStep...) -> VoiceDecision {
+        VoiceDecision(steps: steps, model: "jev-test", latency: 0.4)
     }
 }
 
@@ -371,8 +395,8 @@ final class VoiceSessionTests: XCTestCase {
         voice.choose(.hole)
         guard case .decided(let sameRequest, let chosen) = voice.outcome else { return XCTFail("\(voice.outcome)") }
         XCTAssertEqual(sameRequest, request)
-        XCTAssertEqual(chosen.action, .hole)
-        XCTAssertEqual(chosen.confidence, 1)
+        XCTAssertEqual(chosen.steps[0].action, .hole)
+        XCTAssertEqual(chosen.steps[0].confidence, 1)
         XCTAssertFalse(chosen.needsConfirmation)
     }
 

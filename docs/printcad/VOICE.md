@@ -1,5 +1,55 @@
 # V1 — Voice + point editing ("drill a hole in the center of this face")
 
+## Status (2026-09-28): built
+
+What exists now. The sections after this are the original plan and catalog; this block wins where they differ.
+
+**How a command runs**
+1. 🎤 (⌘⇧V) listens for one utterance. Nothing listens continuously; tap the mic to add more before Enter.
+2. Enter freezes the pick: the clicked face, edges, bodies or sketch profile. With nothing clicked, the face under the Mac pointer counts.
+3. `CommandSplitter` cuts the sentence into steps ("…, then …", "and <verb>").
+4. ONE Jev call asks, per step:
+   - action: 50 options;
+   - target: 17 options, including top/bottom/front/back/left/right face, top/bottom/vertical/all edges, the clicked face's edges, hole edges, the previous step's result and all parts;
+   - placement, depth, direction, axis, relative ("set to / 2 mm more / bigger");
+   - which variable;
+   - what each spoken number means.
+5. Steps run in order (`EditorViewModel+VoiceApply.swift`):
+   - Holes, corner holes, pockets, posts and pads are a hidden sketch on the face plus an extrude.
+   - Everything else goes through the agent layer (`AgentBridge.perform`), the same code external AI tools use.
+6. The whole command is ONE undo step (`UndoStack.coalesce`). If any step fails, the earlier ones are undone and the panel names the failing step.
+
+**Actions that work by voice**
+
+| Group | Actions |
+| --- | --- |
+| Holes and cuts | hole (centre / "here" / blind / M-sizes +0.2 mm), 4 corner holes, pocket |
+| Material on a face | post (boss), pad |
+| Face edits | pull face out, push in, move, draft, delete, shell with the face open |
+| Edges | fillet, chamfer (clicked edges or named groups) |
+| Sketch profile | extrude to a new part, cut into parts |
+| Whole parts | closed shell, mirror (X/Y/Z or across the clicked face), row pattern, circular pattern, move, rotate, scale, duplicate, delete, hide, show all, join, subtract, intersect |
+| New parts | box, cylinder, sphere (on the clicked top face if any) |
+| Editing | "make it 6" / "2 mm deeper" / "bigger" on the last feature (hole diameter via its circle), "same again here", set a variable, undo, redo |
+| View | top, bottom, front, back, left, right, isometric, fit |
+| Inspect | thickness, area, volume (+ PLA grams), overall size, print check (Ender 3 V3 SE bed) |
+| Output | export STL / 3MF to Downloads |
+
+**Live Jev accuracy:** `JevLiveEvalTests`, opt-in via `TEST_RUNNER_JEV_LIVE=1`.
+- 36 phrases, 39 steps.
+- 100 % action accuracy, 0 slot misses.
+- Median 0.31 s, max 0.55 s (2026-09-28, after tuning three option descriptions).
+
+**Not built yet**
+- Revolve by voice (needs an axis pick).
+- Slots, text, sketch-by-voice (drawing arbitrary shapes).
+- Reference planes.
+- Counterbore / countersink (waits for T3.1 fastener tool).
+- Creating new variables by voice (Jev can't write names).
+- Overhang / min-wall print checks.
+- Claude fallback for "not understood" (needs an Anthropic key and a decision).
+- Imported meshes can't be edited parametrically.
+
 ## Context
 Prem wants to point at a face or edge, speak an instruction, press Enter, and see the edit appear almost immediately. Example: on a 2 mm plate, "draw a hole in the center of this surface" should become a sketch circle at the face centre plus a through-cut. The request is to use TypeSafe AI's **Jev** classifier as the decision maker.
 

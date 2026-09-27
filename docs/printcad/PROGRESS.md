@@ -13,6 +13,25 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — V1.4–V2: Full voice catalog + multi-step commands
+- Changed: 50 actions × 17 targets, multi-step commands (`CommandSplitter`: "then", ", <verb>", "and <verb>"), one
+  Jev call with per-step questions (action, target, placement, depth, direction, axis, relative, variable, number
+  roles). `VoiceTopology` resolves "top face", "top/bottom/vertical edges", "hole edges", the clicked face (re-found by
+  plane after earlier steps) and clicked edges against kernel faces/edges. Executor runs steps in order; the whole
+  command is ONE undo step (`UndoStack.coalesce`); a failing step undoes the earlier ones and names itself.
+  Features go through `AgentBridge.perform/faces/edges` (new in-app entry points to the agent layer) or a hidden
+  sketch + extrude on the face (hole, corner holes, pocket, post, pad). Also: "here" uses the tapped point
+  (`voicePickPoint`), Mac hover face = "this" when nothing is clicked, percent numbers, print check vs Ender 3 V3 SE.
+  Full list and not-yet-built items: `docs/printcad/VOICE.md` → Status.
+- Tests added: `VoiceActionTests.swift` (sizing 10, splitter 4, topology 4, undo folding 2, real kernel 23 covering
+  every action family + multi-step + rollback + hover); Jev request/decision tests reworked for steps;
+  `JevLiveEvalTests` (opt-in, real API): 36 phrases / 39 steps → 100 % actions, 0 slot misses, median 0.31 s.
+- Test count / result: unit suite 1836 passed, 0 failed, 2 skipped (live eval + existing fuzz). UI suite not run.
+- Prem checks by hand: "drill a 5 mm hole in the centre then fillet the top edges 1 mm" → both appear, one ⌘Z
+  removes both; hover a face without clicking and say "3 mm hole here".
+- Found work (not done): revolve/slot/text/sketch-by-voice, reference planes, counterbore (after T3.1), new
+  variables by voice, overhang/min-wall checks, Claude fallback for not-understood.
+
 ### 2026-09-28 — V1.3: Voice holes + undo/redo/views
 - Changed: `Voice/VoiceRecipe.swift` (hole size/depth from spoken numbers, default Ø5 through, M-sizes +0.2 mm,
   area centroid of the face outline), `Voice/EditorViewModel+VoiceApply.swift` (face frozen at Enter; hidden circle
