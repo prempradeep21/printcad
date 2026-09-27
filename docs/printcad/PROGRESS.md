@@ -72,10 +72,15 @@ Newest first. Claude Code appends an entry at the end of every task.
   `CompactWidthBarUITests` extrude tests rewritten: they measured the removed bottom bar; they now check the
   on-arrow controls are on screen, hittable and compact, Offset Plane is reachable, and the palette's Delete is
   still reachable.
-- Test count / result: unit 1737 run, 0 failed, 1 skipped (opt-in fuzz). UI: run stopped before finishing at Prem's request (2026-09-28) — not verified; re-run the UI suite
+- Test count / result: unit 1737 run, 0 failed, 1 skipped (opt-in fuzz). UI (verified after the commit, same build):
+  186 passed, 2 failed, 4 skipped (compact-width tests, iPad) across three runs (the simulator crashed / was stopped twice;
+  each run resumed where the last stopped). Both failures also fail on `786f9307` (before U1), so they predate it:
+  `RectangleWorkflowUITests.testGalleryReopenedDesignCanUndoNewRectangle` (gallery card 'Untitled' not hittable after
+  relaunch) and `SettingsUITests.testSnappingControlsPersistAcrossLaunch` (snapping toggle value doesn't change).
 - Prem checks by hand: on Mac and iPad — tap a profile and check the row sits at the arrow and reads well at a few
   camera angles; open the chip menu; type a value (Mac keyboard too); pan away and tap recenter.
 - Found work (not done): the recenter button can sit under the Items panel when that panel is open (both top-right).
+  Also: the two pre-existing UI failures above; first full UI-suite baseline, so there was no earlier record of them.
 
 ### 2026-09-28 — T0.3: Printer profile + build-volume box
 - Changed: new `openshape3d/PrintCAD/PrinterProfile.swift` (Ender 3 V3 SE constants) and
