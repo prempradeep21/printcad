@@ -82,8 +82,26 @@ extension XCTestCase {
     }
 
     /// Tapping a profile arms Extrude at ZERO height (arrow only, no default
-    /// pull) — type a height into the bar's Distance field; submitting
-    /// commits the tool.
+    /// pull) — type a height into the Distance value riding the arrow;
+    /// submitting commits the tool.
+    /// Extrude options live in the menu behind the chip on the arrow
+    /// ("Total ⌄"): open it, then `submenu` (e.g. "Result") if given, and
+    /// pick `item`.
+    func tapExtrudeOption(_ app: XCUIApplication, _ item: String, in submenu: String? = nil) {
+        let chip = app.buttons["ExtrudeOptionsMenu"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 3),
+                      "The extrude options chip should ride the arrow")
+        chip.tap()
+        if let submenu {
+            let sub = app.buttons[submenu].firstMatch
+            XCTAssertTrue(sub.waitForExistence(timeout: 3), "\(submenu) submenu in the extrude options")
+            sub.tap()
+        }
+        let option = app.buttons[item].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 3), "\(item) in the extrude options")
+        option.tap()
+    }
+
     func typeExtrudeHeight(_ app: XCUIApplication, _ value: String = "2") {
         let field = app.textFields["Distance"].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 3),

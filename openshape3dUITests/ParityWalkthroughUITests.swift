@@ -83,7 +83,7 @@ final class ParityWalkthroughUITests: XCTestCase {
 
         // Tap the fill: full extrude bar (badge, symmetric, revolve/sweep/loft)
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.51, dy: 0.49)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         snap("05-extrude-bar-with-badge")
 
         // Pull upward: dynamic preview + arrow
@@ -169,9 +169,9 @@ final class ParityWalkthroughUITests: XCTestCase {
         sleep(1)
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.58, dy: 0.47)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
 
-        app.buttons["Revolve"].firstMatch.tap()
+        tapExtrudeOption(app, "Revolve")
         XCTAssertTrue(
             app.staticTexts["Tap a sketch line to set the revolve axis"].waitForExistence(timeout: 3)
         )

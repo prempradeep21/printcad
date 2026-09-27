@@ -44,3 +44,7 @@ scripts/youtube_series/tts/
 scripts/youtube_series/music-bed.wav
 scripts/youtube_series/dd/
 scripts/youtube_series/*.log
+
+# Local secrets (Jev API key etc.) — never commit
+.env.local
+Config/Secrets.xcconfig

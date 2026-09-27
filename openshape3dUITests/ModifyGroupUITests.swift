@@ -48,7 +48,7 @@ final class ModifyGroupUITests: XCTestCase {
 
         // Tapping the fill builds the extrude and shows the bar.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.51, dy: 0.49)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "Tapping the region should open the extrude bar")
         typeExtrudeHeight(app)
         sleep(1)

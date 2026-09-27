@@ -44,7 +44,7 @@ final class ExtrudeFlowUITests: XCTestCase {
         // Tap inside the filled profile → jumps into the Extrude command.
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.51)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "Tapping a filled profile should start extruding")
 
         // Arming starts at zero height — type one to commit.
@@ -54,7 +54,53 @@ final class ExtrudeFlowUITests: XCTestCase {
         let deleteButton = app.buttons.containing(.staticText, identifier: "Delete").firstMatch
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 3))
         XCTAssertTrue(deleteButton.isEnabled)
-        XCTAssertFalse(app.staticTexts["Extrude"].exists)
+        XCTAssertFalse(app.buttons["Extrude"].exists)
+    }
+
+    /// The extrude controls sit on the arrow, where the value is — not in a
+    /// bar at the bottom of the screen: options chip, value, cancel, commit.
+    /// Typing into the value there commits the extrude.
+    func testExtrudeControlsRideTheArrowNotTheBottom() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["OS3D_FRESH"] = "1"
+        app.launchEnvironment["OS3D_RESET_STORE"] = "1"
+        app.launch()
+
+        drawRectangle(in: app)
+
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.51)).tap()
+        let commit = app.buttons["Extrude"]
+        XCTAssertTrue(commit.waitForExistence(timeout: 5),
+                      "Tapping a filled profile should start extruding")
+
+        let chip = app.buttons["ExtrudeOptionsMenu"]
+        let value = app.textFields["Distance"].firstMatch
+        let cancel = app.buttons["Cancel"]
+        for control in [chip, value, cancel, commit] {
+            XCTAssertTrue(control.waitForExistence(timeout: 3), "\(control) should be on the arrow")
+            XCTAssertTrue(control.isHittable, "\(control) should be tappable")
+        }
+
+        // They sit near the arrow, well clear of the bottom of the screen
+        // where the old bar was. (The row turns with the arrow, so its
+        // bounding box is not a flat strip; only its position is asserted.)
+        let cluster = [chip, value, cancel, commit].map(\.frame).reduce(CGRect.null) { $0.union($1) }
+        let screen = window.frame
+        XCTAssertLessThan(cluster.maxY, screen.maxY - screen.height * 0.2,
+                          "Extrude controls \(cluster) sit at the bottom of the screen")
+        // The old bar's boolean picker is gone from the screen (it lives in
+        // the chip's menu now).
+        XCTAssertFalse(app.buttons["New Body"].exists,
+                       "The Result options should be in the chip's menu, not on screen")
+
+        typeExtrudeHeight(app, "5")
+
+        let deleteButton = app.buttons.containing(.staticText, identifier: "Delete").firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(deleteButton.isEnabled, "The committed body should be selected")
+        XCTAssertTrue(commit.waitForNonExistence(timeout: 3),
+                      "Committing should clear the arrow's controls")
     }
 
     func testSymmetricToggleCommitsExtrude() throws {
@@ -67,13 +113,11 @@ final class ExtrudeFlowUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.51)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
 
         // Symmetric sides: distance is per-side, the solid grows both ways
         // (total depth 2× — asserted at the kernel level in ProfileTests).
-        let symmetric = app.buttons["Symmetric"].firstMatch
-        XCTAssertTrue(symmetric.waitForExistence(timeout: 3), "Extrude bar shows the Symmetric toggle")
-        symmetric.tap()
+        tapExtrudeOption(app, "Symmetric")
 
         typeExtrudeHeight(app)
 
@@ -81,7 +125,7 @@ final class ExtrudeFlowUITests: XCTestCase {
         let deleteButton = app.buttons.containing(.staticText, identifier: "Delete").firstMatch
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 3))
         XCTAssertTrue(deleteButton.isEnabled)
-        XCTAssertFalse(app.staticTexts["Extrude"].exists)
+        XCTAssertFalse(app.buttons["Extrude"].exists)
 
         let undo = app.buttons["UndoButton"]
         XCTAssertTrue(undo.isEnabled)
@@ -111,9 +155,9 @@ final class ExtrudeFlowUITests: XCTestCase {
             .press(forDuration: 0.15, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.58)))
         app.buttons["Exit Sketching"].tap()
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.37, dy: 0.50)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app)
-        XCTAssertFalse(app.staticTexts["Extrude"].exists)
+        XCTAssertFalse(app.buttons["Extrude"].exists)
 
         // Profile B overlaps body A; tap point sits outside A's footprint.
         startSketchTool(app, "Rect")
@@ -128,12 +172,10 @@ final class ExtrudeFlowUITests: XCTestCase {
             .press(forDuration: 0.15, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.40, dy: 0.42)))
         app.buttons["Exit Sketching"].tap()
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.50)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
 
         // Boolean badge → New Body: the overlap must NOT auto-union.
-        let newBodySegment = app.buttons["New Body"].firstMatch
-        XCTAssertTrue(newBodySegment.waitForExistence(timeout: 3), "Extrude bar shows the boolean badge")
-        newBodySegment.tap()
+        tapExtrudeOption(app, "New Body", in: "Result")
         typeExtrudeHeight(app)
 
         // Commit selects the new body — delete it.
@@ -168,7 +210,7 @@ final class ExtrudeFlowUITests: XCTestCase {
         let pullEnd = window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.30))
         pullStart.press(forDuration: 0.15, thenDragTo: pullEnd)
 
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 3),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 3),
                       "Releasing the pull keeps the Extrude tool active")
         app.buttons["Extrude"].firstMatch.tap()
 

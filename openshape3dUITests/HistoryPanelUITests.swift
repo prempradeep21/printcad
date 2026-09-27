@@ -42,7 +42,7 @@ final class HistoryPanelUITests: XCTestCase {
 
         // Tap inside the filled profile → Extrude command → commit a new body.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.51)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app)
         sleep(1)
 

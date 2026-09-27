@@ -15,41 +15,6 @@ struct NumericInputBar: View {
     @State private var values: [Double] = []
     @FocusState private var focusedField: Int?
 
-    /// The extrude bar's Distance field holds TEXT, not a formatted number:
-    /// it takes the evaluator's arithmetic like every other numeric field
-    /// (the arrow pill, the dimension field, the History rows), and the
-    /// Extrude button applies whatever is typed before committing — a
-    /// formatted field only flushed on Return, so a tap on Extrude used to
-    /// commit the stale value silently (gotcha 37).
-    @State private var extrudeDistanceText: String = ""
-    @State private var extrudeDistancePadOpen = false
-    @State private var extrudeDistanceUsesKeyboard = AppSettings.prefersSystemKeyboard
-    @FocusState private var extrudeDistanceFocused: Bool
-
-    private func submitExtrudeDistance() {
-        if applyExtrudeDistanceText() {
-            viewModel.commitTool()
-        } else {
-            viewModel.errorMessage =
-                "Couldn't read \"\(extrudeDistanceText)\" as a distance."
-        }
-    }
-
-    private func extrudeDistanceDisplay(_ mm: Double?) -> String {
-        let shown = AppSettings.shared.unit.display(fromMM: mm ?? 0)
-        if abs(shown - shown.rounded()) < 1e-6 { return String(Int(shown.rounded())) }
-        return String(format: "%g", (shown * 100).rounded() / 100)
-    }
-
-    /// Parse the field (arithmetic allowed) into the tool's distance.
-    /// Returns false when the text is not a number, leaving the tool alone.
-    @discardableResult
-    private func applyExtrudeDistanceText() -> Bool {
-        guard let typed = ExpressionEvaluator.evaluate(extrudeDistanceText) else { return false }
-        viewModel.setExtrudeDistance(AppSettings.shared.unit.mm(fromDisplay: typed))
-        return true
-    }
-
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// A couple of bars carry controls too wide to share one row at iPhone
@@ -561,152 +526,13 @@ struct NumericInputBar: View {
         }
     }
 
+    /// Sketch extrudes and face pulls carry their controls on the arrow
+    /// (`ExtrudeGizmoOverlay`, Shapr3D-style), so only the cylinder-diameter
+    /// pull keeps a bottom bar.
+    @ViewBuilder
     private func extrudeBar(_ context: EditorViewModel.ToolContext) -> some View {
         if let cyl = context.cylinderFace {
-            return AnyView(diameterBar(context, radius: cyl.radius))
-        }
-        return AnyView(extrudeBarBody(context))
-    }
-
-    private func extrudeBarBody(_ context: EditorViewModel.ToolContext) -> some View {
-        AdaptiveBar {
-            Text("Extrude")
-                .font(.headline)
-                .fixedSize()
-
-            HStack(spacing: 6) {
-                Text("Distance")
-                    .font(.caption)
-                    .foregroundStyle(.barLabel)
-                    .fixedSize()
-                TextField("Distance", text: $extrudeDistanceText)
-                .keyboardType(.numbersAndPunctuation)
-                .autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 90)
-                .focused($extrudeDistanceFocused)
-                .onAppear { extrudeDistanceText = extrudeDistanceDisplay(context.distance) }
-                // A drag on the arrow moves the distance under the field;
-                // mirror it unless the person is mid-edit.
-                .onChange(of: viewModel.toolContext?.distance) { _, new in
-                    if !extrudeDistanceFocused && !extrudeDistancePadOpen {
-                        extrudeDistanceText = extrudeDistanceDisplay(new)
-                    }
-                }
-                .onSubmit { submitExtrudeDistance() }
-                .allowsHitTesting(extrudeDistanceUsesKeyboard)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !extrudeDistanceUsesKeyboard { extrudeDistancePadOpen = true }
-                }
-                .numericKeypad(
-                    isPresented: $extrudeDistancePadOpen,
-                    text: $extrudeDistanceText,
-                    onCommit: {
-                        extrudeDistancePadOpen = false
-                        submitExtrudeDistance()
-                    },
-                    onSwitchToSystemKeyboard: {
-                        extrudeDistancePadOpen = false
-                        extrudeDistanceUsesKeyboard = true
-                        extrudeDistanceFocused = true
-                    }
-                )
-            }
-
-            // End condition: Through All / Up To Next resolve to a distance
-            // from the bodies in the document and land in the field, where
-            // the person can still change it (spec: SOLIDWORKS end conditions).
-            Menu {
-                ForEach(ExtrudeEnd.allCases, id: \.self) { end in
-                    Button(end.title) {
-                        if end == .blind { return }
-                        // Text typed but not yet submitted still decides the
-                        // direction (its sign), so apply it first.
-                        if extrudeDistanceText != extrudeDistanceDisplay(context.distance) {
-                            _ = applyExtrudeDistanceText()
-                        }
-                        if let mm = viewModel.resolveExtrudeEnd(end) {
-                            extrudeDistanceText = extrudeDistanceDisplay(mm)
-                        }
-                    }
-                }
-            } label: {
-                Label("End", systemImage: "arrow.down.to.line")
-                    .labelStyle(.titleOnly)
-            }
-            .accessibilityIdentifier("ExtrudeEndMenu")
-
-            // Symmetric sides: distance is per-side, total depth 2×.
-            Button("Symmetric") {
-                viewModel.setExtrudeSymmetric(!context.symmetric)
-            }
-            .buttonStyle(.bordered)
-            // Concrete grey, not hierarchical `.secondary` — see `.barLabel`.
-            .tint(context.symmetric ? Color.accentColor : .barLabel)
-
-            Spacer()
-        } actions: {
-            // Sketch profiles can revolve about one of their lines, sweep
-            // along a path, loft to more profiles, or coil into a helix.
-            if context.sketchID != nil {
-                Button("Revolve") {
-                    viewModel.beginRevolveAxisPick()
-                }
-                Button("Sweep") {
-                    viewModel.beginSweepPathPick()
-                }
-                Button("Loft") {
-                    viewModel.beginLoftProfilePick()
-                }
-                Button("Helix") {
-                    viewModel.showHelixOptions = true
-                }
-            }
-            // Face pulls can become an offset construction plane instead.
-            if context.sourceBody != nil {
-                Button("Offset Plane") {
-                    viewModel.beginOffsetPlane()
-                }
-            }
-            Button("Cancel") {
-                viewModel.cancelTool()
-            }
-            Button("Extrude") {
-                // Whatever is in the field is what the person means, even
-                // without a Return first.
-                if extrudeDistanceFocused || extrudeDistanceText != extrudeDistanceDisplay(context.distance) {
-                    guard applyExtrudeDistanceText() else {
-                        viewModel.errorMessage = "Couldn't read \"\(extrudeDistanceText)\" as a distance."
-                        return
-                    }
-                }
-                viewModel.commitTool()
-            }
-            .buttonStyle(.borderedProminent)
-        } footer: {
-            // Boolean badge: manual result override (spec §4.1).
-            HStack(spacing: 8) {
-                Text("Result")
-                    .font(.caption)
-                    .foregroundStyle(.barLabel)
-                    .fixedSize()
-                Picker("Result", selection: Binding(
-                    get: { viewModel.toolContext?.booleanOverride ?? .auto },
-                    set: { viewModel.setBooleanOverride($0) }
-                )) {
-                    ForEach(BooleanOverride.allCases, id: \.self) { kind in
-                        Text(kind.rawValue).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-            }
-        }
-        .sheet(isPresented: $viewModel.showHelixOptions) {
-            HelixOptionsSheet { radius, pitch, turns in
-                viewModel.commitHelixSweep(radius: radius, pitch: pitch, turns: turns)
-            }
+            diameterBar(context, radius: cyl.radius)
         }
     }
 

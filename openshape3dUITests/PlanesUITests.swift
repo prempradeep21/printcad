@@ -236,13 +236,11 @@ final class PlanesUITests: XCTestCase {
 
         // Tap the new fill (coincident with the top face): Extrude starts.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.51, dy: 0.50)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "The profile drawn on the face should be tappable for extrude")
 
         // Boolean badge → New Body so the result stays separate from the box.
-        let newBodySegment = app.buttons["New Body"].firstMatch
-        XCTAssertTrue(newBodySegment.waitForExistence(timeout: 3))
-        newBodySegment.tap()
+        tapExtrudeOption(app, "New Body", in: "Result")
         typeExtrudeHeight(app)
 
         // The new body is selected; delete it — the box must survive as a

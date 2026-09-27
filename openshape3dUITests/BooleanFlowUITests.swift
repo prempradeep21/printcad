@@ -37,21 +37,19 @@ final class BooleanFlowUITests: XCTestCase {
         app.buttons["Exit Sketching"].tap()
 
         window.coordinate(withNormalizedOffset: tapInside).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         if newBody {
             // The profile overlaps the body already there, so the extrude
             // offers a boolean: keep them separate, or there is nothing to
             // subtract later.
-            let segment = app.buttons["New Body"].firstMatch
-            XCTAssertTrue(segment.waitForExistence(timeout: 3))
-            segment.tap()
+            tapExtrudeOption(app, "New Body", in: "Result")
         }
         typeExtrudeHeight(app)
         // The commit dismisses the keyboard + extrude bar, and the tool
         // palette re-centers. A palette tap issued mid-animation uses a stale
         // frame and lands one button off (CombineGroup's tap armed Measure).
         // Wait for the bar to leave, then let the palette settle.
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForNonExistence(timeout: 5))
         sleep(1)
     }
 

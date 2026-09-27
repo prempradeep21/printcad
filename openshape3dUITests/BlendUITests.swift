@@ -34,7 +34,7 @@ final class BlendUITests: XCTestCase {
         p(0.32, 0.32).press(forDuration: 0.15, thenDragTo: p(0.68, 0.62))
         app.buttons["Exit Sketching"].tap(); sleep(1)
         p(0.45, 0.45).tap()   // arm extrude on the region
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app); sleep(1)
         app.buttons["ViewsMenu"].tap()
         app.buttons["Isometric"].tap(); sleep(2)

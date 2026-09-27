@@ -48,9 +48,9 @@ final class ItemsFolderUITests: XCTestCase {
         drawRectangle(in: app)
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.51)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app)
-        XCTAssertFalse(app.staticTexts["Extrude"].exists)
+        XCTAssertFalse(app.buttons["Extrude"].exists)
 
         app.buttons["ItemsButton"].tap()
         XCTAssertTrue(app.staticTexts["Bodies"].waitForExistence(timeout: 3))

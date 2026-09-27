@@ -30,7 +30,7 @@ final class HistoryReorderUITests: XCTestCase {
             .press(forDuration: 0.15, thenDragTo: window.coordinate(withNormalizedOffset: b))
         app.buttons["Exit Sketching"].tap(); sleep(1)
         window.coordinate(withNormalizedOffset: tapInside).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app, height); sleep(1)
     }
 

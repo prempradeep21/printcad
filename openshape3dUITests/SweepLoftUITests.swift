@@ -55,10 +55,10 @@ final class SweepLoftUITests: XCTestCase {
 
         // Tap the circle fill → Extrude tool with a Sweep option.
         circleCenter.tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "Tapping a filled profile should start the profile tool")
 
-        app.buttons["Sweep"].firstMatch.tap()
+        tapExtrudeOption(app, "Sweep")
         XCTAssertTrue(
             app.staticTexts["Tap sketch lines to build the sweep path"].waitForExistence(timeout: 3),
             "Sweep should prompt for path entities"
@@ -115,9 +115,9 @@ final class SweepLoftUITests: XCTestCase {
 
         // Tap the first fill → Extrude tool with a Loft option.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.41, dy: 0.48)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
 
-        app.buttons["Loft"].firstMatch.tap()
+        tapExtrudeOption(app, "Loft")
         XCTAssertTrue(
             app.staticTexts["Tap profile fills to add loft sections"].waitForExistence(timeout: 3),
             "Loft should prompt for more sections"
@@ -137,10 +137,10 @@ final class SweepLoftUITests: XCTestCase {
 
         // Cancel back to the extrude bar, then out entirely.
         app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 3),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 3),
                       "Cancelling the loft pick should return to Extrude")
         app.buttons["Cancel"].firstMatch.tap()
-        XCTAssertFalse(app.staticTexts["Extrude"].exists)
+        XCTAssertFalse(app.buttons["Extrude"].exists)
 
         // Only the two sketch entities are undoable.
         let undo = app.buttons["UndoButton"]

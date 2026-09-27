@@ -13,6 +13,31 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — U1: Recenter button + Shapr3D-style extrude controls on the arrow
+- Changed:
+  - New `UI/RecenterButton.swift`: round button just left of the orientation cube; runs the existing Fit View
+    (frames every sketch and body). Toolbar "Fit View" kept.
+  - `UI/ExtrudeGizmoOverlay.swift`: sketch extrudes and face pulls now carry all their controls on the arrow —
+    options chip (Total/Symmetric, End ▸ Through All / Up To Next, Result ▸ Auto/New Body/Union/Subtract/Intersect,
+    Revolve/Sweep/Loft/Helix, Offset Plane), the value, ✕ cancel, ✓ commit. The row turns with the arrow like
+    Shapr3D (never upside down; level when the arrow is near vertical; kept on screen). Tapping the value opens a
+    wide field there with the number pad, fx (variables) and keyboard toggle.
+  - `UI/NumericInputBar.swift`: bottom extrude bar removed (cylinder-diameter bar unchanged).
+  - `Editor/EditorViewModel.swift`: on-arrow value now resolves variables and reports unreadable input;
+    commit/cancel clear a half-typed arrow edit so the next extrude doesn't open in edit mode.
+- Tests added: `RecenterUITests` (button beside cube; recenter puts the model under screen centre),
+  `ExtrudeFlowUITests.testExtrudeControlsRideTheArrowNotTheBottom`.
+- Tests changed (same checks, new location): UI tests wait for the ✓ "Extrude" button instead of the old bar's
+  "Extrude" title, and pick Symmetric / New Body / Revolve / Sweep / Loft / Helix / Offset Plane through the chip
+  menu (`tapExtrudeOption`). `FaceFlowUITests` types into the on-arrow Distance field.
+  `CompactWidthBarUITests` extrude tests rewritten: they measured the removed bottom bar; they now check the
+  on-arrow controls are on screen, hittable and compact, Offset Plane is reachable, and the palette's Delete is
+  still reachable.
+- Test count / result: unit 1737 run, 0 failed, 1 skipped (opt-in fuzz). UI: run stopped before finishing at Prem's request (2026-09-28) — not verified; re-run the UI suite
+- Prem checks by hand: on Mac and iPad — tap a profile and check the row sits at the arrow and reads well at a few
+  camera angles; open the chip menu; type a value (Mac keyboard too); pan away and tap recenter.
+- Found work (not done): the recenter button can sit under the Items panel when that panel is open (both top-right).
+
 ### 2026-09-28 — T0.3: Printer profile + build-volume box
 - Changed: new `openshape3d/PrintCAD/PrinterProfile.swift` (Ender 3 V3 SE constants) and
   `openshape3d/PrintCAD/BuildVolume.swift` (12 box edges, Y-up: X ±110, Z ±110, Y 0–250).

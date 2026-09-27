@@ -64,7 +64,7 @@ final class BugHuntUITests: XCTestCase {
 
         // 3) Tap the ring (top-left corner area, well outside the circle).
         p(0.36, 0.36).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "Tapping the ring region should arm extrude")
         logReadouts(app, "extrude-armed")
         shot("03-extrude-armed")
@@ -174,7 +174,7 @@ final class BugHuntUITests: XCTestCase {
         p(0.34, 0.34).press(forDuration: 0.15, thenDragTo: p(0.66, 0.60))
         app.buttons["Exit Sketching"].tap(); sleep(1)
         p(0.5, 0.47).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app); sleep(1)
         app.buttons["ViewsMenu"].tap(); app.buttons["Isometric"].tap(); sleep(2)
         logReadouts(app, "base-body"); shot("f01-base-body")
@@ -195,7 +195,7 @@ final class BugHuntUITests: XCTestCase {
 
         // Extrude the boss up.
         p(0.5, 0.32).tap()
-        if app.staticTexts["Extrude"].waitForExistence(timeout: 5) {
+        if app.buttons["Extrude"].waitForExistence(timeout: 5) {
             typeExtrudeHeight(app); sleep(1)
         } else {
             NSLog("OS3D_BUG boss-extrude-not-armed")

@@ -31,7 +31,7 @@ final class FilletLeakUITests: XCTestCase {
         p(w, x0, y0).press(forDuration: 0.15, thenDragTo: p(w, x1, y1))
         app.buttons["Exit Sketching"].tap(); sleep(1)
         p(w, tapAt.0, tapAt.1).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app); sleep(1)
     }
 

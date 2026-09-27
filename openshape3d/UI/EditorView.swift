@@ -1010,6 +1010,11 @@ struct EditorView: View {
                 }
             }
             .overlay {
+                // Recenter beside the cube; interactive, so outside the
+                // non-interactive group above.
+                RecenterButton(viewModel: viewModel)
+            }
+            .overlay {
                 // Shapr3D on-arrow value pills: extrude / diameter (§4.1), and
                 // the move gizmo's twin — live drag distance, plus the typed
                 // exact-distance field when an arrow is tapped (§5.1). One

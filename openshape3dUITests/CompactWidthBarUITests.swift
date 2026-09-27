@@ -146,7 +146,10 @@ final class CompactWidthBarUITests: XCTestCase {
         commit.tap()
     }
 
-    /// The extrude bar: the worst of the two reported cases.
+    /// Extrude controls ride the arrow now (no bottom bar); at iPhone width
+    /// they must stay on screen and reachable, keep the options menu
+    /// reachable, and leave the palette and the viewport usable — the two
+    /// failures the old bottom bar was reported for.
     func testExtrudeBarIsUsableAtCompactWidth() throws {
         let app = launchSeeded()
         try skipUnlessCompact(app)
@@ -154,46 +157,38 @@ final class CompactWidthBarUITests: XCTestCase {
         // Tap the seeded box's top face to arm extrude.
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.27)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
-                      "Tapping the top face should arm the extrude bar")
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
+                      "Tapping the top face should arm the extrude controls")
 
-        // The two controls called out in the bug report, plus the widest label
-        // in the bar, which is the first to be squeezed.
-        assertReadsHorizontally(app.buttons["Extrude"], minimumWidth: 50, "Extrude button")
-        assertReadsHorizontally(app.buttons["Cancel"], minimumWidth: 44, "Cancel button")
-        assertReadsHorizontally(app.buttons["Offset Plane"], minimumWidth: 70, "Offset Plane button")
+        assertArrowControlsUsable(app, window: window, maxHeightFraction: 0.25)
 
-        // The bar must leave the tool palette usable: Delete is its last entry
-        // and was unreachable under the old layout.
+        // The controls must leave the tool palette usable: Delete is its last
+        // entry and was unreachable under the old bottom bar.
         let delete = app.buttons.containing(.staticText, identifier: "Delete").firstMatch
         XCTAssertTrue(delete.waitForExistence(timeout: 3))
-        // Nine entries do not fit an iPhone portrait screen above the info
-        // strip and the bar, so the palette scrolls there (ViewThatFits); the
-        // requirement is that Delete is reachable — directly or by scrolling
-        // the palette — rather than sitting under the bar where no scroll
-        // could reveal it (the original defect).
+        // Nine entries do not fit an iPhone portrait screen, so the palette
+        // scrolls there (ViewThatFits); the requirement is that Delete is
+        // reachable — directly or by scrolling the palette.
         if !delete.isHittable {
             let palette = app.scrollViews["ToolPalette"]
             XCTAssertTrue(palette.exists, "A palette that does not fit should scroll")
             palette.swipeUp()
         }
         XCTAssertTrue(delete.isHittable,
-                      "The extrude bar is covering the tool palette's last entry")
+                      "The extrude controls are covering the tool palette's last entry")
 
-        // …and it must not swallow the viewport. The old bar reached ~40%.
-        let barTop = app.buttons["Extrude"].frame.minY
-        let screenHeight = window.frame.height
-        XCTAssertGreaterThan(barTop, screenHeight * 0.6,
-                             "The extrude bar starts \(barTop)pt down a \(screenHeight)pt screen — too tall")
+        // The widest option, once in the bar, is still one tap away.
+        tapExtrudeOption(app, "Offset Plane")
+        XCTAssertTrue(app.buttons["Add Plane"].waitForExistence(timeout: 3),
+                      "Offset Plane should be reachable from the arrow's options menu")
     }
 
     /// Landscape is the tightest case: on every iPhone but the Max/Plus the
-    /// width stays compact while the height drops to ~390pt, so the bar, the
-    /// info strip and the tool palette are all competing for it.
+    /// width stays compact while the height drops to ~390pt.
     ///
-    /// Unlike the tests above this one runs everywhere — reading horizontally
-    /// and staying reachable are requirements in both size classes, so there is
-    /// nothing to skip.
+    /// Unlike the tests above this one runs everywhere — staying on screen and
+    /// reachable are requirements in both size classes, so there is nothing to
+    /// skip.
     func testExtrudeBarIsUsableInLandscape() throws {
         let app = launchSeeded()
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -201,16 +196,13 @@ final class CompactWidthBarUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.30)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
-                      "Tapping the top face should arm the extrude bar in landscape")
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
+                      "Tapping the top face should arm the extrude controls in landscape")
 
-        assertReadsHorizontally(app.buttons["Extrude"], minimumWidth: 50, "Extrude button")
-        assertReadsHorizontally(app.buttons["Cancel"], minimumWidth: 44, "Cancel button")
+        assertArrowControlsUsable(app, window: window, maxHeightFraction: 0.35)
 
         // The palette cannot show all eight tools in ~390pt on any layout, so
-        // the requirement here is that Delete is *reachable* by scrolling —
-        // not that it is on screen already. What must not happen is the bar
-        // growing until the palette has no usable scroll region left.
+        // the requirement here is that Delete is *reachable* by scrolling.
         let delete = app.buttons.containing(.staticText, identifier: "Delete").firstMatch
         XCTAssertTrue(delete.waitForExistence(timeout: 3))
         if !delete.isHittable {
@@ -220,12 +212,31 @@ final class CompactWidthBarUITests: XCTestCase {
         }
         XCTAssertTrue(delete.isHittable,
                       "The tool palette's last entry is unreachable even after scrolling")
+    }
 
-        // The bar must still leave the model visible to work on.
-        let barTop = app.buttons["Extrude"].frame.minY
-        let screenHeight = window.frame.height
-        XCTAssertGreaterThan(barTop, screenHeight * 0.5,
-                             "The bar starts \(barTop)pt down a \(screenHeight)pt landscape screen — it covers over half the viewport")
+    /// The on-arrow options chip, value, cancel and commit: each on screen and
+    /// hittable, and together a small cluster rather than a bar that
+    /// swallows the viewport.
+    private func assertArrowControlsUsable(_ app: XCUIApplication, window: XCUIElement,
+                                           maxHeightFraction: CGFloat,
+                                           file: StaticString = #filePath, line: UInt = #line) {
+        assertReadsHorizontally(app.buttons["ExtrudeOptionsMenu"], minimumWidth: 40,
+                                "Extrude options chip", file: file, line: line)
+        let controls = [app.buttons["ExtrudeOptionsMenu"], app.textFields["Distance"].firstMatch,
+                        app.buttons["Cancel"], app.buttons["Extrude"]]
+        var union = CGRect.null
+        for control in controls {
+            XCTAssertTrue(control.waitForExistence(timeout: 3),
+                          "\(control) should exist", file: file, line: line)
+            XCTAssertTrue(control.isHittable,
+                          "\(control) should be hittable, not clipped or covered", file: file, line: line)
+            XCTAssertTrue(window.frame.contains(control.frame),
+                          "\(control) runs off screen: \(control.frame)", file: file, line: line)
+            union = union.union(control.frame)
+        }
+        XCTAssertLessThan(union.height, window.frame.height * maxHeightFraction,
+                          "The arrow's controls span \(union.height)pt of a \(window.frame.height)pt screen",
+                          file: file, line: line)
     }
 
     /// The primitive dimension bar, which showed "B/o/x" stacked vertically.

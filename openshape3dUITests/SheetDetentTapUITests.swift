@@ -378,8 +378,8 @@ final class SheetDetentTapUITests: XCTestCase {
                 window.coordinate(withNormalizedOffset: CGVector(dx: 0.48, dy: 0.56)))
         app.buttons["Exit Sketching"].tap()
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.41, dy: 0.48)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
-        app.buttons["Helix"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
+        tapExtrudeOption(app, "Helix")
         let turns = app.textFields["HelixTurns"]
         XCTAssertTrue(turns.waitForExistence(timeout: 3))
         // The tappable box is the 90 pt field at the row's trailing end.

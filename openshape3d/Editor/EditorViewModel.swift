@@ -7593,9 +7593,12 @@ final class EditorViewModel {
     /// (Enter commits the feature, matching the bottom bar).
     func commitExtrudeArrowEdit(_ text: String) {
         defer { editingExtrudeArrow = false }
-        guard let typed = ExpressionEvaluator.evaluate(text),
-              let context = toolContext, case .extrude = context.kind
-        else { return }
+        guard let context = toolContext, case .extrude = context.kind else { return }
+        // The pill's fx menu inserts variable names, so resolve them here.
+        guard let typed = ExpressionEvaluator.evaluate(text, variables: session.variableValues()) else {
+            errorMessage = "Couldn't read \"\(text)\" as a distance."
+            return
+        }
         // The pill shows and edits the DISPLAY unit; the tool works in mm.
         let value = AppSettings.shared.unit.mm(fromDisplay: typed)
         if let cyl = context.cylinderFace {
@@ -7671,6 +7674,7 @@ final class EditorViewModel {
     /// Commits whichever profile tool is active (extrude or revolve).
     func commitTool() {
         cachedPullWorldBody = nil
+        editingExtrudeArrow = false
         guard let context = toolContext else {
             cancelTool()
             return
@@ -8224,6 +8228,9 @@ final class EditorViewModel {
 
     func cancelTool() {
         toolContext = nil
+        // A half-typed on-arrow value dies with its tool; left set, the next
+        // extrude would open straight into the editor with its arrow hidden.
+        editingExtrudeArrow = false
         extrudeDragAnchor = nil
         cachedPullWorldBody = nil
         faceMoveActive = false

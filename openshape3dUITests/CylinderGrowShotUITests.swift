@@ -34,7 +34,7 @@ final class CylinderGrowShotUITests: XCTestCase {
         app.buttons["Exit Sketching"].tap()
         sleep(1)
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         typeExtrudeHeight(app)
         sleep(1)
 

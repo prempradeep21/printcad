@@ -117,10 +117,9 @@ final class FaceFlowUITests: XCTestCase {
             app.staticTexts["Face selected — drag it to push or pull"].waitForExistence(timeout: 3)
         )
 
-        let pill = app.buttons["ExtrudeArrowValue"]
-        XCTAssertTrue(pill.waitForExistence(timeout: 3))
-        pill.tap()
-        let field = app.textFields["ExtrudeArrowField"]
+        // The value riding the arrow is the Distance field; `replaceText`
+        // taps it open.
+        let field = app.textFields["Distance"].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         // The pill's field arrives holding the current value ("0"), so typing
         // into it without clearing produced "0-3" (which evaluates to -3 and

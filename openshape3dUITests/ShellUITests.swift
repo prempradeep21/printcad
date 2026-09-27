@@ -35,7 +35,7 @@ final class ShellUITests: XCTestCase {
         p(0.32, 0.32).press(forDuration: 0.15, thenDragTo: p(0.68, 0.62))
         app.buttons["Exit Sketching"].tap(); sleep(1)
         p(0.45, 0.45).tap()   // arm extrude on the region
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5))
         // Type a real height — the 2 mm default extrude leaves nothing for a
         // wall to hollow, so Shell would (correctly) refuse it.
         let field = app.textFields["Distance"].firstMatch

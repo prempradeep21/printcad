@@ -46,10 +46,10 @@ final class RevolveFlowUITests: XCTestCase {
 
         // Tap the rectangle fill → Extrude tool with a Revolve option.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.59, dy: 0.49)).tap()
-        XCTAssertTrue(app.staticTexts["Extrude"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Extrude"].waitForExistence(timeout: 5),
                       "Tapping a filled profile should start the profile tool")
 
-        app.buttons["Revolve"].firstMatch.tap()
+        tapExtrudeOption(app, "Revolve")
         XCTAssertTrue(
             app.staticTexts["Tap a sketch line to set the revolve axis"].waitForExistence(timeout: 3),
             "Revolve should ask for an axis line"

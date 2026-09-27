@@ -56,7 +56,7 @@ final class TextProjectUITests: XCTestCase {
         // Tap the left stroke of the 'O' ring — its fill proves the glyph
         // loops closed into profiles; Extrude opens. The exact screen spot
         // depends on font metrics, so probe a few candidates.
-        let extrudeTitle = app.staticTexts["Extrude"]
+        let extrudeTitle = app.buttons["Extrude"]
         let candidates: [CGVector] = [
             CGVector(dx: 0.46, dy: 0.20),
             CGVector(dx: 0.42, dy: 0.20),
