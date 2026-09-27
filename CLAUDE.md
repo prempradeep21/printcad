@@ -38,7 +38,7 @@ never instantiate `DocumentSession`/`ModelContainer` in tests.
 
 | Topic | Decision |
 | --- | --- |
-| Modeling | Parametric history: a feature tree rebuilt from scratch on every change |
+| Modeling | Parametric history: upstream's `FeatureGraph`, rebuilt incrementally via `RebuildPlanner` / `EvalCache` (decided 2026-09-28). Reuse upstream features that fit; replace any that block planned work |
 | Devices | Mac and iPad equally; iPhone for viewing and editing dimensions |
 | Mac strategy | Native Mac Catalyst build (upstream's, already working), ad-hoc signed for local use. Mac-specific UI polish stays in M4 |
 | Kernel | OCCT through the existing `OCCTBridge` / `OCCTKernel` seam. Euclid only for live previews |

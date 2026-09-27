@@ -1,53 +1,62 @@
 # PrintCAD — Roadmap
 
-Pace: 2–4 hrs/week ≈ one task per session. Expect ~5–6 months to M3.
-Each milestone ends with a real print.
+Rewritten 2026-09-28 after mapping the original plan against what OpenShape3D already ships.
+Policy: reuse what upstream has when it fits; replace it when it would block something we want.
+Pace: 2–4 hrs/week ≈ one task per session. Each milestone ends with a real print.
 
-## M0 — Baseline (2–3 sessions)
+## What upstream already covers (no task needed)
+
+Verified by existing tests; see the 2026-09-28 mapping in `PROGRESS.md`.
+
+| Original task | Covered by |
+| --- | --- |
+| T1.1 expressions + variables | `Kernel/ExpressionEvaluator.swift`, `Model/Variables.swift` |
+| T1.2 Codable feature model | `FeatureGraph` / `FeatureNode` / `FeatureKind`, persisted per feature |
+| T1.3 rebuild engine | `FeatureGraph.evaluate` + `RebuildPlanner` + `EvalCache` (incremental; same result as a full rebuild) |
+| T1.4 extrude as a feature | `EditorViewModel` commits `.extrude` / `.revolve` / `.sweep` / `.boolean` nodes |
+| T1.5 timeline | `UI/HistoryPanelView.swift` (edit, suppress, rollback, error badge) |
+| T1.6 variables panel + expressions in fields | `VariablesPanelView`, `ExpressionValueField` |
+| T2.1–T2.4, T2.6 fillet, chamfer, shell, booleans | OCCT via `OCCTBridge.mm`; `.fillet` / `.chamfer` / `.shell` / `.boolean` features |
+| T2.2 topological naming | `FaceRef` / `EdgeRef`, `TopoNaming.swift`, `ElementNaming.swift` |
+| T2.7 edit survival | `FeatureGraphEvalTests` edit-and-resolve tests |
+| M4 patterns, mirror, revolve, Mac, AI input | `.pattern` / `.mirror` / `.revolve`; Mac Catalyst build; `Agent/*` |
+
+Conventions to respect: the app is **Y-up** (printer Z = app Y); geometry tests are pure values
+(never `DocumentSession` / `ModelContainer` in XCTest); mutations go through `DocumentCommand`;
+new numeric inputs store `Expr` so they follow variables; new code in new files, not `EditorViewModel.swift`.
+
+## M0 — Baseline (done: T0.1, T0.2)
 
 | ID | Task | Acceptance |
 | --- | --- | --- |
-| T0.1 | Build, run tests, record baseline | All upstream tests pass; count logged in PROGRESS.md |
-| T0.2 | Run on Mac (Mac Catalyst); fix anything iOS-only that breaks | Sketch → extrude → export works on Mac |
-| T0.3 | Printer profile constant + ghost build-volume box 220×220×250 in viewport | Box visible, toggleable; unit test on profile values |
-| T0.4 | Export check: 3MF declares millimetres; STL bbox equals model bbox; part sits on Z=0 | New export tests pass; Prem opens a 40×30×5 box in Creality Print |
+| T0.3 | `PrinterProfile` (Ender 3 V3 SE constants) + toggleable 220×220×250 build-volume box in the viewport | Box visible on Mac and iPad, toggle works; unit test on profile values and box geometry |
+| T0.4 | Print-ready export: STL/3MF rotated to Z-up and dropped onto Z=0, on by default | Export tests: Z-up, min Z = 0, bbox matches model; 3MF declares mm. Prem opens a 40×30×5 box in Creality Print, lying flat |
 | T0.5 | Manual: print the box | Photo in PROGRESS.md |
 
-## M1 — Parametric core (6–8 sessions)
+## M1 — Make it mine (2–3 sessions)
 
 | ID | Task | Acceptance |
 | --- | --- | --- |
-| T1.1 | `ExpressionEvaluator` + `Variable` (pure Swift) | Unit tests: precedence, parentheses, unknown name, divide by zero, cycles |
-| T1.2 | `PrintCADDocument` / `Feature` Codable model | JSON round-trip tests for every FeatureKind implemented so far |
-| T1.3 | `RebuildEngine` for primitive + sketch + extrude | U3 and plain-plate fixtures rebuild from JSON |
-| T1.4 | Extrude tool emits a feature instead of mutating bodies | UI test: extrude, change distance in timeline, body updates |
-| T1.5 | Timeline strip UI (tap to edit, failed = red) | Manual check on iPad + Mac |
-| T1.6 | Variables panel + expressions in all numeric fields | U4 fixture passes |
-| T1.7 | Manual: print U3 spacer and a U4 variant | Photos in PROGRESS.md |
+| T1.1 | Personal-use cleanup: bundle ID `com.prem.printcad`, remove bug-report upload entry points, pin units to mm and hide the unit picker, AI control server off by default | Builds and tests green; no Firebase entry points reachable; Settings shows no unit toggle |
+| T1.2 | Fixture check: build TESTING.md U1–U5 with the existing features as tests (exact volumes/bboxes) | U1–U5 pass, or each failure logged as found work |
+| T1.3 | Manual: print U3 spacer and a U4 variable-driven variant | Photos |
 
-## M2 — Solid features on OCCT (8–10 sessions, the risky one)
+## M2 — Print-ready (4–5 sessions)
 
 | ID | Task | Acceptance |
 | --- | --- | --- |
-| T2.1 | OCCT fillet + chamfer in `OCCTBridge` (`BRepFilletAPI_MakeFillet`, `BRepFilletAPI_MakeChamfer`) | Kernel tests: exact cylindrical fillet faces; too-large radius returns an error, not a crash |
-| T2.2 | `TopoRef` capture + resolution | Unit tests for match, ambiguous, lost |
-| T2.3 | Fillet/chamfer as features | U1 passes |
-| T2.4 | Shell on OCCT (`BRepOffsetAPI_MakeThickSolid`) as feature | U2 passes |
-| T2.5 | Face offset + sketch offset | Tests on plate thicken |
-| T2.6 | Booleans as features | Subtract/union fixture tests |
-| T2.7 | Edit-survival | U5 passes |
-| T2.8 | Manual: print U1 and U2 | Photos |
+| T2.1 | Print checks: fits build volume, watertight (reuse `ShapeHealth`), thin wall < 0.8 mm, overhang > 45° heatmap | Tests on deliberately bad fixtures |
+| T2.2 | Hole clearance: +0.2 mm default on hole diameters, driven by a variable | Tests: hole diameter = nominal + clearance; variable change updates it |
+| T2.3 | `.printcad` file: wrap the existing `.os3d` `ProjectArchive` with a Files-app document type | Save, close, reopen U1–U5 identical |
+| T2.4 | iCloud Drive container (needs the paid developer account) | Edit on iPad, open on Mac |
+| T2.5 | Manual: print U1 designed entirely on iPad | Photo |
 
-## M3 — Print-ready (4–5 sessions)
+## M3 — Features I want (ongoing)
 
-| ID | Task | Acceptance |
-| --- | --- | --- |
-| T3.1 | Print checks: fit, thin wall, overhang heatmap, watertight | Tests on deliberately bad fixtures |
-| T3.2 | `.printcad` file format via DocumentGroup | Save, close, reopen U1–U5 identical |
-| T3.3 | Export defaults, filenames, Mac hand-off to Creality Print | Manual |
-| T3.4 | iCloud Drive container (needs paid account) | Edit on iPad, open on Mac |
-| T3.5 | Manual: print U1 designed entirely on iPad | Photo |
-
-## M4 — Polish (ongoing)
-
-Fastener tool (F21, first), patterns & mirror, revolve as feature, iPhone compact editing, native Mac UI, AI part input (later).
+| ID | Task |
+| --- | --- |
+| T3.1 | Fastener tool: clearance/tap holes, counterbores, printable threads using `thread_clearance` (builds on the helix tool) |
+| T3.2 | Fix upstream revolve bug: valid closed profile refused (`STATUS_AND_NEXT_STEPS.md`, sheet 7.2) |
+| T3.3 | iPhone: view and edit dimensions/variables comfortably |
+| T3.4 | Mac polish: menus, shortcuts, window sizing |
+| T3.5 | AI "describe the part" on top of the existing `Agent/*` control surface |

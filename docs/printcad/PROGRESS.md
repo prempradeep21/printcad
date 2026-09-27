@@ -13,6 +13,15 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-28 — Roadmap re-scope
+- Mapped every original task against the fork. M1 (expressions, variables, feature model, rebuild, timeline)
+  and most of M2 (fillet, chamfer, shell, booleans, topo naming, edit survival) already exist upstream with tests.
+- ROADMAP.md rewritten around the real gaps: build volume, Z-up export, personal-use cleanup, print checks,
+  hole clearance, .printcad file, iCloud, fastener tool.
+- CLAUDE.md: modeling decision changed from "rebuild from scratch" to upstream's incremental rebuild (Prem approved).
+- Found work (not done): ARCHITECTURE.md still sketches `PrintCADDocument` / `RebuildEngine` / `TopoRef`; map them
+  onto `FeatureGraph` / `RebuildPlanner` / `FaceRef`+`EdgeRef` or drop them.
+
 ### 2026-09-27 — T0.2: Run on Mac
 - Changed: nothing in code. Upstream's Mac Catalyst build works as-is (ad-hoc signed, command in T0.1 below).
   Used Catalyst rather than "Designed for iPad", which would need a signing team. Prem approved Catalyst as the Mac strategy (CLAUDE.md updated).
