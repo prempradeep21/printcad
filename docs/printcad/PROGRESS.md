@@ -13,6 +13,14 @@ Newest first. Claude Code appends an entry at the end of every task.
 
 ---
 
+### 2026-09-27 — T0.2: Run on Mac
+- Changed: nothing in code. Upstream's Mac Catalyst build works as-is (ad-hoc signed, command in T0.1 below).
+  Used Catalyst rather than "Designed for iPad", which would need a signing team; decision pending with Prem.
+- Tests added: none.
+- Test count / result: unchanged from T0.1.
+- Prem checked by hand: sketch → extrude → export works on the Mac app.
+- Found work (not done): none new.
+
 ## Baseline
 
 ### 2026-09-27 — T0.1: Build, run tests, record baseline
